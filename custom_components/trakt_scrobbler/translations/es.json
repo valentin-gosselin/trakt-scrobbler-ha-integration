@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuración de Trakt Scrobbler",
+        "description": "Para configurar Trakt Scrobbler, necesitas crear una app en Trakt:\n\n1. Ve a {trakt_app_url}\n2. Crea una nueva app\n3. Establece la URI de redirección: `urn:ietf:wg:oauth:2.0:oob`\n4. Copia tu Client ID y Client Secret",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret"
+        }
+      },
+      "device": {
+        "title": "Activar dispositivo",
+        "description": "Para completar la configuración:\n\n1. Visita: **{verification_url}**\n2. Introduce el código: **{user_code}**\n3. Haz clic en Enviar después de autorizar"
+      },
+      "options": {
+        "title": "Configurar opciones del Scrobbler",
+        "data": {
+          "name": "Nombre de la integración",
+          "media_players": "Reproductores multimedia a monitorizar",
+          "scrobble_percentage": "Hacer scrobble al % visto",
+          "update_watching": "Actualizar estado 'Viendo ahora'",
+          "check_entity": "Solo hacer scrobble cuando estas entidades lo permitan"
+        }
+      }
+    },
+    "error": {
+      "device_code_failed": "Error al obtener el código del dispositivo de Trakt",
+      "token_poll_failed": "Error al obtener el token de acceso. Por favor, inténtalo de nuevo.",
+      "unknown": "Ha ocurrido un error desconocido"
+    },
+    "abort": {
+      "no_device_info": "No hay información del dispositivo disponible",
+      "token_poll_failed": "No se pudo obtener el token de acceso de Trakt"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Trakt Scrobbler",
+        "data": {
+          "media_players": "Reproductores multimedia a monitorizar",
+          "scrobble_percentage": "Hacer scrobble al % visto",
+          "update_watching": "Actualizar estado 'Viendo ahora'",
+          "check_entity": "Solo hacer scrobble cuando estas entidades lo permitan"
+        }
+      }
+    }
+  }
+}

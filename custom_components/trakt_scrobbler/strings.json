@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Trakt Scrobbler Configuration",
+        "description": "To configure Trakt Scrobbler, you need to create an app on Trakt:\n\n1. Go to {trakt_app_url}\n2. Create a new app\n3. Set the redirect URI to: `urn:ietf:wg:oauth:2.0:oob`\n4. Copy your Client ID and Client Secret",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret"
+        }
+      },
+      "device": {
+        "title": "Activate Device",
+        "description": "To complete setup:\n\n1. Visit: **{verification_url}**\n2. Enter code: **{user_code}**\n3. Click Submit below after authorizing"
+      },
+      "options": {
+        "title": "Configure Scrobbler Options",
+        "data": {
+          "name": "Integration Name",
+          "media_players": "Media Players to Monitor",
+          "scrobble_percentage": "Scrobble at % watched",
+          "update_watching": "Update 'Currently Watching' status",
+          "check_entity": "Only scrobble when these entities allow it"
+        }
+      }
+    },
+    "error": {
+      "device_code_failed": "Failed to get device code from Trakt",
+      "token_poll_failed": "Failed to get access token. Please try again.",
+      "unknown": "Unknown error occurred"
+    },
+    "abort": {
+      "no_device_info": "No device information available",
+      "token_poll_failed": "Could not get access token from Trakt"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Trakt Scrobbler Options",
+        "data": {
+          "media_players": "Media Players to Monitor",
+          "scrobble_percentage": "Scrobble at % watched",
+          "update_watching": "Update 'Currently Watching' status",
+          "check_entity": "Only scrobble when these entities allow it"
+        }
+      }
+    }
+  }
+}

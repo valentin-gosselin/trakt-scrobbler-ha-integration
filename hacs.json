@@ -1,0 +1,8 @@
+{
+  "name": "Trakt Scrobbler",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["media_player"],
+  "homeassistant": "2023.1.0",
+  "country": ["FR", "US", "GB", "DE", "ES"]
+}

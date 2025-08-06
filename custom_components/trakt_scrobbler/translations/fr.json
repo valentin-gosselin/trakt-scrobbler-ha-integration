@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration du Trakt Scrobbler",
+        "description": "Pour configurer Trakt Scrobbler, vous devez créer une app sur Trakt :\n\n1. Allez sur {trakt_app_url}\n2. Créez une nouvelle app\n3. Définissez l'URI de redirection : `urn:ietf:wg:oauth:2.0:oob`\n4. Copiez votre Client ID et Client Secret",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret"
+        }
+      },
+      "device": {
+        "title": "Activer l'appareil",
+        "description": "Pour terminer la configuration :\n\n1. Visitez : **{verification_url}**\n2. Entrez le code : **{user_code}**\n3. Cliquez sur Valider ci-dessous après avoir autorisé"
+      },
+      "options": {
+        "title": "Configurer les options du Scrobbler",
+        "data": {
+          "name": "Nom de l'intégration",
+          "media_players": "Lecteurs multimédia à surveiller",
+          "scrobble_percentage": "Scrobbler à % regardé",
+          "update_watching": "Mettre à jour le statut 'En cours de visionnage'",
+          "check_entity": "Scrobbler uniquement quand ces entités le permettent"
+        }
+      }
+    },
+    "error": {
+      "device_code_failed": "Impossible d'obtenir le code de l'appareil depuis Trakt",
+      "token_poll_failed": "Impossible d'obtenir le token d'accès. Veuillez réessayer.",
+      "unknown": "Une erreur inconnue s'est produite"
+    },
+    "abort": {
+      "no_device_info": "Aucune information d'appareil disponible",
+      "token_poll_failed": "Impossible d'obtenir le token d'accès depuis Trakt"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options du Trakt Scrobbler",
+        "data": {
+          "media_players": "Lecteurs multimédia à surveiller",
+          "scrobble_percentage": "Scrobbler à % regardé",
+          "update_watching": "Mettre à jour le statut 'En cours de visionnage'",
+          "check_entity": "Scrobbler uniquement quand ces entités le permettent"
+        }
+      }
+    }
+  }
+}
