@@ -20,7 +20,9 @@
           "media_players": "Media Players to Monitor",
           "scrobble_percentage": "Scrobble at % watched",
           "update_watching": "Update 'Currently Watching' status",
-          "check_entity": "Only scrobble when these entities allow it"
+          "check_entity": "Only scrobble when these entities allow it",
+          "plex_server_url": "Plex Server URL (optional)",
+          "plex_token": "Plex Token (optional)"
         }
       }
     },
@@ -42,7 +44,9 @@
           "media_players": "Media Players to Monitor",
           "scrobble_percentage": "Scrobble at % watched",
           "update_watching": "Update 'Currently Watching' status",
-          "check_entity": "Only scrobble when these entities allow it"
+          "check_entity": "Only scrobble when these entities allow it",
+          "plex_server_url": "Plex Server URL (optional)",
+          "plex_token": "Plex Token (optional)"
         }
       }
     }

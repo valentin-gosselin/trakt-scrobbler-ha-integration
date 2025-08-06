@@ -12,6 +12,8 @@ CONF_MEDIA_PLAYERS = "media_players"
 CONF_CHECK_ENTITY = "check_entity"
 CONF_SCROBBLE_PERCENTAGE = "scrobble_percentage"
 CONF_UPDATE_WATCHING = "update_watching"
+CONF_PLEX_SERVER_URL = "plex_server_url"
+CONF_PLEX_TOKEN = "plex_token"
 
 # OAuth URLs
 OAUTH_AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"

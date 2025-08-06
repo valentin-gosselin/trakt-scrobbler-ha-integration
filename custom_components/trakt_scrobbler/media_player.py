@@ -8,12 +8,15 @@ from typing import Any
 import aiohttp
 
 from homeassistant import config_entries, core
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.const import CONF_NAME, STATE_PLAYING, STATE_PAUSED
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_PLEX_SERVER_URL,
+    CONF_PLEX_TOKEN,
     ATTR_EPISODE,
     ATTR_IMDB_ID,
     ATTR_MEDIA_TYPE,
@@ -65,9 +68,14 @@ async def async_setup_entry(
     access_token = config.get("access_token")
     refresh_token = config.get("refresh_token")
     
+    # Setup Plex (optional)
+    plex_server_url = config.get(CONF_PLEX_SERVER_URL)
+    plex_token = config.get(CONF_PLEX_TOKEN)
+    
     async_add_entities(
         [
             TraktScrobblerMediaPlayer(
+                hass,
                 name,
                 client_id,
                 client_secret,
@@ -77,6 +85,8 @@ async def async_setup_entry(
                 check_entities,
                 scrobble_percentage,
                 update_watching,
+                plex_server_url,
+                plex_token,
             )
         ]
     )
@@ -87,6 +97,7 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
 
     def __init__(
         self,
+        hass,
         name,
         client_id,
         client_secret,
@@ -96,8 +107,11 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         check_entities,
         scrobble_percentage,
         update_watching,
+        plex_server_url,
+        plex_token,
     ) -> None:
         """Initialize the Trakt scrobbler."""
+        self.hass = hass
         self._name = name
         self._attr_unique_id = f"{DOMAIN}-{name}"
         self._state = None
@@ -125,6 +139,21 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         self._check_entities = check_entities
         self._scrobble_percentage = scrobble_percentage
         self._update_watching = update_watching
+        
+        # Plex Configuration (optional)
+        self._plex_server_url = plex_server_url
+        self._plex_token = plex_token
+        self._plex_server = None
+        
+        # Initialize Plex if configured
+        if self._plex_server_url and self._plex_token:
+            try:
+                from plexapi.server import PlexServer
+                self._plex_server = PlexServer(self._plex_server_url, self._plex_token)
+                _LOGGER.info("Plex server connected: %s", self._plex_server.friendlyName)
+            except Exception as e:
+                _LOGGER.warning("Failed to connect to Plex server: %s", e)
+                self._plex_server = None
         
         # Headers for API calls
         self._headers = {
@@ -256,9 +285,31 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             if not title and "plex" in media_source:
                 # Try to extract from content_id or other attributes
                 content_id = attrs.get("media_content_id", "")
-                if "metadata" in content_id:
-                    _LOGGER.debug("Plex content detected but no title, may need Plex API call")
-                    # For now, we'll skip but this could be enhanced with Plex API integration
+                if "metadata" in content_id and self._plex_server:
+                    _LOGGER.debug("Plex content detected but no title, fetching from Plex API")
+                    # Fetch metadata from Plex API
+                    plex_metadata = await self.get_plex_metadata(content_id)
+                    if plex_metadata:
+                        # Merge Plex metadata with existing attributes
+                        attrs.update(plex_metadata)
+                        # Re-extract title and IDs after update
+                        title = attrs.get("media_title") or attrs.get("media_series_title")
+                        if attrs.get("imdb_id"):
+                            ids["imdb"] = attrs.get("imdb_id")
+                        if attrs.get("tmdb_id"):
+                            ids["tmdb"] = attrs.get("tmdb_id")
+                        if attrs.get("tvdb_id"):
+                            ids["tvdb"] = attrs.get("tvdb_id")
+                        # Re-detect media type if needed
+                        if attrs.get("media_content_type") == "movie":
+                            media_type = MEDIA_TYPE_MOVIE
+                        elif attrs.get("media_content_type") == "episode":
+                            media_type = MEDIA_TYPE_EPISODE
+                    else:
+                        _LOGGER.debug("Failed to fetch Plex metadata")
+                        return None, None
+                elif not self._plex_server:
+                    _LOGGER.debug("Plex content but no Plex server configured")
                     return None, None
             
             if not title or not media_type:
@@ -293,6 +344,66 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             }
         
         return media_type, media_obj
+
+    async def get_plex_metadata(self, content_id: str) -> dict | None:
+        """Get metadata from Plex server using content_id."""
+        if not self._plex_server:
+            return None
+            
+        try:
+            # Extract rating key from content_id
+            # Format: server://xxx/com.plexapp.plugins.library/library/metadata/84303
+            parts = content_id.split('/')
+            if 'metadata' in parts:
+                idx = parts.index('metadata')
+                if idx + 1 < len(parts):
+                    rating_key = parts[idx + 1]
+                    
+                    # Fetch metadata from Plex
+                    _LOGGER.debug("Fetching Plex metadata for rating key: %s", rating_key)
+                    
+                    # Run in executor to avoid blocking
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    item = await loop.run_in_executor(
+                        None, 
+                        self._plex_server.fetchItem, 
+                        int(rating_key)
+                    )
+                    
+                    if item:
+                        metadata = {}
+                        
+                        # Determine if it's a movie or episode
+                        if item.type == 'movie':
+                            metadata['media_title'] = item.title
+                            metadata['media_content_type'] = 'movie'
+                            if hasattr(item, 'year'):
+                                metadata['year'] = item.year
+                        elif item.type == 'episode':
+                            metadata['media_series_title'] = item.grandparentTitle
+                            metadata['media_title'] = item.title
+                            metadata['media_season'] = item.seasonNumber
+                            metadata['media_episode'] = item.episodeNumber
+                            metadata['media_content_type'] = 'episode'
+                            
+                        # Get external IDs if available
+                        if hasattr(item, 'guids'):
+                            for guid in item.guids:
+                                if 'imdb://' in guid.id:
+                                    metadata['imdb_id'] = guid.id.replace('imdb://', '')
+                                elif 'tmdb://' in guid.id:
+                                    metadata['tmdb_id'] = guid.id.replace('tmdb://', '')
+                                elif 'tvdb://' in guid.id:
+                                    metadata['tvdb_id'] = guid.id.replace('tvdb://', '')
+                        
+                        _LOGGER.debug("Plex metadata retrieved: %s", metadata)
+                        return metadata
+                        
+        except Exception as e:
+            _LOGGER.error("Error fetching Plex metadata: %s", e)
+            
+        return None
 
     async def start_watching(self, media_obj: dict, progress: float):
         """Send start watching to Trakt."""

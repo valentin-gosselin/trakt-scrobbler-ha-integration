@@ -7,6 +7,6 @@
   "version": "1.0.0",
   "codeowners": ["@valentin-gosselin"],
   "config_flow": true,
-  "requirements": ["aiohttp>=3.8.0"],
+  "requirements": ["aiohttp>=3.8.0", "plexapi>=4.15.0"],
   "iot_class": "cloud_polling"
 }

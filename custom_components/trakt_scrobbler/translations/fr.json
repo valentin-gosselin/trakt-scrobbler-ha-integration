@@ -20,7 +20,9 @@
           "media_players": "Lecteurs multimédia à surveiller",
           "scrobble_percentage": "Scrobbler à % regardé",
           "update_watching": "Mettre à jour le statut 'En cours de visionnage'",
-          "check_entity": "Scrobbler uniquement quand ces entités le permettent"
+          "check_entity": "Scrobbler uniquement quand ces entités le permettent",
+          "plex_server_url": "URL du serveur Plex (optionnel)",
+          "plex_token": "Token Plex (optionnel)"
         }
       }
     },
@@ -42,7 +44,9 @@
           "media_players": "Lecteurs multimédia à surveiller",
           "scrobble_percentage": "Scrobbler à % regardé",
           "update_watching": "Mettre à jour le statut 'En cours de visionnage'",
-          "check_entity": "Scrobbler uniquement quand ces entités le permettent"
+          "check_entity": "Scrobbler uniquement quand ces entités le permettent",
+          "plex_server_url": "URL du serveur Plex (optionnel)",
+          "plex_token": "Token Plex (optionnel)"
         }
       }
     }

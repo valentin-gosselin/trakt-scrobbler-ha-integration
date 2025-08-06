@@ -24,6 +24,8 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_MEDIA_PLAYERS,
+    CONF_PLEX_SERVER_URL,
+    CONF_PLEX_TOKEN,
     CONF_SCROBBLE_PERCENTAGE,
     CONF_UPDATE_WATCHING,
     DEFAULT_SCROBBLE_PERCENTAGE,
@@ -158,6 +160,8 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
+                vol.Optional(CONF_PLEX_SERVER_URL): str,
+                vol.Optional(CONF_PLEX_TOKEN): str,
             }
         )
 
