@@ -18,7 +18,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = entry.data
+    # Merge entry.data and entry.options
+    config = {**entry.data, **entry.options}
+    hass.data[DOMAIN][entry.entry_id] = config
     
     # Forward the setup to the media_player platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

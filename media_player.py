@@ -286,28 +286,9 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                 # Try to extract from content_id or other attributes
                 content_id = attrs.get("media_content_id", "")
                 if "metadata" in content_id and self._plex_server:
-                    _LOGGER.debug("Plex content detected but no title, fetching from Plex API")
-                    # Fetch metadata from Plex API
-                    plex_metadata = await self.get_plex_metadata(content_id)
-                    if plex_metadata:
-                        # Merge Plex metadata with existing attributes
-                        attrs.update(plex_metadata)
-                        # Re-extract title and IDs after update
-                        title = attrs.get("media_title") or attrs.get("media_series_title")
-                        if attrs.get("imdb_id"):
-                            ids["imdb"] = attrs.get("imdb_id")
-                        if attrs.get("tmdb_id"):
-                            ids["tmdb"] = attrs.get("tmdb_id")
-                        if attrs.get("tvdb_id"):
-                            ids["tvdb"] = attrs.get("tvdb_id")
-                        # Re-detect media type if needed
-                        if attrs.get("media_content_type") == "movie":
-                            media_type = MEDIA_TYPE_MOVIE
-                        elif attrs.get("media_content_type") == "episode":
-                            media_type = MEDIA_TYPE_EPISODE
-                    else:
-                        _LOGGER.debug("Failed to fetch Plex metadata")
-                        return None, None
+                    _LOGGER.debug("Plex content detected but no title, need async metadata fetch")
+                    # Return a special marker indicating we need async processing
+                    return "PLEX_ASYNC_NEEDED", content_id
                 elif not self._plex_server:
                     _LOGGER.debug("Plex content but no Plex server configured")
                     return None, None
@@ -405,6 +386,73 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             
         return None
 
+    async def _extract_media_info_async(self, player, content_id):
+        """Extract media information from player with async Plex API call."""
+        try:
+            # Fetch metadata from Plex API
+            plex_metadata = await self.get_plex_metadata(content_id)
+            if not plex_metadata:
+                _LOGGER.debug("Failed to fetch Plex metadata")
+                return None, None
+                
+            # Now process with the enhanced metadata
+            attrs = player.attributes.copy()
+            attrs.update(plex_metadata)
+            
+            # Re-run the extraction logic with enhanced metadata
+            media_source = attrs.get("app_name", "").lower()
+            
+            # Try to detect media type
+            media_type = None
+            if attrs.get("media_content_type") == "movie":
+                media_type = MEDIA_TYPE_MOVIE
+            elif attrs.get("media_content_type") in ["tvshow", "episode"]:
+                media_type = MEDIA_TYPE_EPISODE
+            elif attrs.get("media_season") is not None or attrs.get("media_episode") is not None:
+                media_type = MEDIA_TYPE_EPISODE
+            
+            # Extract IDs
+            ids = {}
+            if attrs.get("imdb_id"):
+                ids["imdb"] = attrs.get("imdb_id")
+            if attrs.get("tmdb_id"):
+                ids["tmdb"] = attrs.get("tmdb_id")
+            if attrs.get("tvdb_id"):
+                ids["tvdb"] = attrs.get("tvdb_id")
+            
+            # Build media object
+            media_obj = {}
+            
+            if media_type == MEDIA_TYPE_MOVIE:
+                media_obj["movie"] = {
+                    "title": attrs.get("media_title"),
+                    "year": attrs.get("year"),
+                }
+                if ids:
+                    media_obj["movie"]["ids"] = ids
+                    
+            elif media_type == MEDIA_TYPE_EPISODE:
+                show_name = attrs.get("media_series_title")
+                season = attrs.get("media_season")
+                episode = attrs.get("media_episode")
+                
+                media_obj["show"] = {
+                    "title": show_name,
+                }
+                if ids:
+                    media_obj["show"]["ids"] = ids
+                    
+                media_obj["episode"] = {
+                    "season": season,
+                    "number": episode,
+                }
+            
+            return media_type, media_obj
+            
+        except Exception as e:
+            _LOGGER.error("Error in async media info extraction: %s", e)
+            return None, None
+
     async def start_watching(self, media_obj: dict, progress: float):
         """Send start watching to Trakt."""
         if not self._update_watching:
@@ -493,6 +541,22 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                 
             # Extract media information
             media_type, media_obj = self._extract_media_info(player)
+            
+            # Handle async Plex processing
+            if media_type == "PLEX_ASYNC_NEEDED":
+                content_id = media_obj  # media_obj contains the content_id in this case
+                _LOGGER.debug("Starting async Plex metadata fetch for %s", player_entity_id)
+                # Create async task for Plex metadata fetch
+                async def process_plex_metadata():
+                    async_media_type, async_media_obj = await self._extract_media_info_async(player, content_id)
+                    if async_media_type and async_media_obj:
+                        # Process the media with the fetched metadata
+                        await self._process_media(player, async_media_type, async_media_obj)
+                
+                task = self.hass.async_create_task(process_plex_metadata())
+                task.add_done_callback(self._handle_task_result)
+                continue
+                
             if not media_type or not media_obj:
                 _LOGGER.debug("Could not extract media info from %s", player_entity_id)
                 continue
@@ -500,6 +564,16 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             # We found a valid player - process it
             _LOGGER.debug("Processing player %s", player_entity_id)
             
+            # Process the media synchronously
+            task = self.hass.async_create_task(self._process_media(player, media_type, media_obj))
+            task.add_done_callback(self._handle_task_result)
+            
+            # We only process the first valid player
+            break
+
+    async def _process_media(self, player, media_type, media_obj):
+        """Process media information and handle scrobbling."""
+        try:
             # Calculate progress
             progress, position, duration = self.calculate_progress(player)
             self._progress = progress
@@ -513,7 +587,7 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                 content_type = "episode" if media_type == MEDIA_TYPE_EPISODE else "movie"
                 _LOGGER.debug("%s duration too short (%s seconds), minimum is %s seconds", 
                              content_type.title(), duration, min_duration)
-                continue
+                return
             
             # Update internal state
             self._media_type = media_type
@@ -533,20 +607,17 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             if player.state == STATE_PLAYING:
                 # Check if this is a new media
                 if self._last_scrobbled != media_obj and not self._is_watching:
-                    task = self.hass.async_create_task(self.start_watching(media_obj, progress))
-                    task.add_done_callback(self._handle_task_result)
+                    await self.start_watching(media_obj, progress)
                 
                 # Check if we should scrobble
                 if progress >= self._scrobble_percentage and self._last_scrobbled != media_obj:
-                    task = self.hass.async_create_task(self.scrobble(media_obj, progress))
-                    task.add_done_callback(self._handle_task_result)
+                    await self.scrobble(media_obj, progress)
                     
             elif player.state == STATE_PAUSED and self._is_watching:
-                task = self.hass.async_create_task(self.pause_watching(media_obj, progress))
-                task.add_done_callback(self._handle_task_result)
-            
-            # We only process the first valid player
-            break
+                await self.pause_watching(media_obj, progress)
+                
+        except Exception as e:
+            _LOGGER.error("Error processing media: %s", e)
 
     @property
     def name(self):

@@ -42,6 +42,12 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
+
     def __init__(self):
         """Initialize the config flow."""
         self._data = {}
@@ -232,7 +238,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        # Note: self.config_entry is automatically set by Home Assistant
+        # Explicit assignment is deprecated as of HA 2025.12
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -242,30 +249,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # Check if all optional fields have default values
             user_input.setdefault(CONF_CHECK_ENTITY, [])
             
-            # Update config entry
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data={**self.config_entry.data, **user_input},
-            )
             return self.async_create_entry(title="", data=user_input)
 
         schema = vol.Schema(
             {
                 vol.Required(
                     CONF_SCROBBLE_PERCENTAGE,
-                    default=self.config_entry.data.get(
-                        CONF_SCROBBLE_PERCENTAGE, DEFAULT_SCROBBLE_PERCENTAGE
+                    default=self.config_entry.options.get(
+                        CONF_SCROBBLE_PERCENTAGE, 
+                        self.config_entry.data.get(CONF_SCROBBLE_PERCENTAGE, DEFAULT_SCROBBLE_PERCENTAGE)
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
                 vol.Required(
                     CONF_UPDATE_WATCHING,
-                    default=self.config_entry.data.get(
-                        CONF_UPDATE_WATCHING, DEFAULT_UPDATE_WATCHING
+                    default=self.config_entry.options.get(
+                        CONF_UPDATE_WATCHING,
+                        self.config_entry.data.get(CONF_UPDATE_WATCHING, DEFAULT_UPDATE_WATCHING)
                     ),
                 ): bool,
                 vol.Required(
                     CONF_MEDIA_PLAYERS,
-                    default=self.config_entry.data.get(CONF_MEDIA_PLAYERS, []),
+                    default=self.config_entry.options.get(
+                        CONF_MEDIA_PLAYERS,
+                        self.config_entry.data.get(CONF_MEDIA_PLAYERS, [])
+                    ),
                 ): EntitySelector(
                     EntitySelectorConfig(
                         filter=EntityFilterSelectorConfig(domain="media_player"),
@@ -274,7 +281,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ),
                 vol.Optional(
                     CONF_CHECK_ENTITY,
-                    default=self.config_entry.data.get(CONF_CHECK_ENTITY, []),
+                    default=self.config_entry.options.get(
+                        CONF_CHECK_ENTITY,
+                        self.config_entry.data.get(CONF_CHECK_ENTITY, [])
+                    ),
                 ): EntitySelector(
                     EntitySelectorConfig(
                         filter=EntityFilterSelectorConfig(
@@ -283,6 +293,20 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         multiple=True,
                     )
                 ),
+                vol.Optional(
+                    CONF_PLEX_SERVER_URL,
+                    default=self.config_entry.options.get(
+                        CONF_PLEX_SERVER_URL,
+                        self.config_entry.data.get(CONF_PLEX_SERVER_URL, "")
+                    ),
+                ): str,
+                vol.Optional(
+                    CONF_PLEX_TOKEN,
+                    default=self.config_entry.options.get(
+                        CONF_PLEX_TOKEN,
+                        self.config_entry.data.get(CONF_PLEX_TOKEN, "")
+                    ),
+                ): str,
             }
         )
 
