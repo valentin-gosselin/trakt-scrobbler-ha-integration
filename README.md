@@ -89,13 +89,25 @@ This is useful for:
 
 ## Supported Media Players
 
-The integration works with any media player that provides proper media metadata. Tested with:
-- Plex
-- Jellyfin/Emby
-- Kodi
-- Apple TV
-- Chromecast
-- And many more...
+The integration works with media players that provide proper media metadata:
+
+### ✅ Fully Supported
+- **Plex** - Full metadata support including Plex API integration
+- **Jellyfin** - Works with TMDB/IMDB IDs
+- **Emby** - Works with TMDB/IMDB IDs  
+- **Kodi** - Works with TMDB/IMDB IDs
+
+### ⚠️ Limited Support
+- **Apple TV** - Only if playing from supported sources (Plex, etc.)
+- **Chromecast** - Only if casting from supported sources
+
+### ❌ Not Supported
+- **Netflix** - Does not expose metadata
+- **Prime Video** - Does not expose metadata
+- **Disney+** - Does not expose metadata
+- **HBO Max** - Does not expose metadata
+- **YouTube** - Does not expose metadata
+- Most streaming services do not provide the necessary metadata
 
 ### Required Attributes
 
