@@ -1,16 +1,36 @@
 """The Trakt Scrobbler integration."""
 
-import asyncio
+from datetime import datetime, timedelta, timezone
 import logging
+
+import voluptuous as vol
 
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
+import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN
+from .const import (
+    ATTR_DRY_RUN,
+    ATTR_START_DATE,
+    DOMAIN,
+    SERVICE_IMPORT_PLEX_HISTORY,
+)
+from .history_sync import HistorySync
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
+
+# Where the media_player platform registers its live entities so the service
+# can reach their Plex + Trakt access.
+DATA_ENTITIES = "entities"
+
+IMPORT_HISTORY_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_START_DATE): cv.datetime,
+        vol.Optional(ATTR_DRY_RUN, default=True): cv.boolean,
+    }
+)
 
 
 async def async_setup_entry(
@@ -18,17 +38,56 @@ async def async_setup_entry(
 ) -> bool:
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(DATA_ENTITIES, {})
     # Merge entry.data and entry.options
     config = {**entry.data, **entry.options}
     hass.data[DOMAIN][entry.entry_id] = config
-    
+
     # Forward the setup to the media_player platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
     # Set up reload listener
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
-    
+
+    _async_register_services(hass)
+
     return True
+
+
+def _async_register_services(hass: core.HomeAssistant) -> None:
+    """Register the Plex history import service (once)."""
+    if hass.services.has_service(DOMAIN, SERVICE_IMPORT_PLEX_HISTORY):
+        return
+
+    async def _handle_import(call: core.ServiceCall) -> None:
+        entities = list(hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {}).values())
+        if not entities:
+            _LOGGER.error(
+                "No Trakt Scrobbler entity available to run the history import"
+            )
+            return
+
+        start_date = call.data.get(ATTR_START_DATE)
+        if start_date is None:
+            # Default: last 30 days if no date given (safe, small backfill).
+            start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        elif start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+
+        dry_run = call.data.get(ATTR_DRY_RUN, True)
+
+        # Use the first entity (multi-instance households would target one each,
+        # but a single import covers the shared Plex/Trakt account here).
+        entity = entities[0]
+        summary = await HistorySync(entity).async_import(start_date, dry_run=dry_run)
+        _LOGGER.info("Plex history import finished: %s", summary)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_IMPORT_PLEX_HISTORY,
+        _handle_import,
+        schema=IMPORT_HISTORY_SCHEMA,
+    )
 
 
 async def options_update_listener(
@@ -47,6 +106,6 @@ async def async_unload_entry(
 
     # Remove config entry from domain
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok

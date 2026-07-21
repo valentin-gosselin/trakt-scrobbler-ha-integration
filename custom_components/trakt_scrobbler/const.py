@@ -32,6 +32,17 @@ SCROBBLE_PAUSE = "/scrobble/pause"
 SCROBBLE_STOP = "/scrobble/stop"
 SEARCH = "/search/{type}"
 HISTORY = "/sync/history/{type}"
+SYNC_HISTORY = "/sync/history"
+
+# Service: import Plex watch history into Trakt (backfill)
+SERVICE_IMPORT_PLEX_HISTORY = "import_plex_history"
+ATTR_START_DATE = "start_date"
+ATTR_DRY_RUN = "dry_run"
+
+# Batch size for pushing items to /sync/history
+HISTORY_BATCH_SIZE = 100
+# Storage key that remembers the last synced watch date (for auto-sync)
+STORAGE_KEY_LAST_SYNC = "last_history_sync"
 
 # Defaults
 DEFAULT_SCROBBLE_PERCENTAGE = 80

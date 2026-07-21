@@ -1,0 +1,26 @@
+import_plex_history:
+  name: Import Plex history
+  description: >-
+    Backfill your Trakt history from the Plex server watch history. Reads Plex
+    history from the given start date and adds anything not already on Trakt,
+    using the real watch date. Deduplicated against your existing Trakt history.
+  fields:
+    start_date:
+      name: Start date
+      description: >-
+        Only import Plex history watched on or after this date/time. Defaults to
+        the last 30 days if omitted. Set this to your TV Time import date for the
+        initial backfill.
+      required: false
+      example: "2025-01-01 00:00:00"
+      selector:
+        datetime:
+    dry_run:
+      name: Dry run
+      description: >-
+        When enabled (default), nothing is sent to Trakt. The items that would
+        be added are only written to the log so you can review them first.
+      required: false
+      default: true
+      selector:
+        boolean:

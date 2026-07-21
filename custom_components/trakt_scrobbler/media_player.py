@@ -72,24 +72,28 @@ async def async_setup_entry(
     plex_server_url = config.get(CONF_PLEX_SERVER_URL)
     plex_token = config.get(CONF_PLEX_TOKEN)
     
-    async_add_entities(
-        [
-            TraktScrobblerMediaPlayer(
-                hass,
-                name,
-                client_id,
-                client_secret,
-                access_token,
-                refresh_token,
-                media_players,
-                check_entities,
-                scrobble_percentage,
-                update_watching,
-                plex_server_url,
-                plex_token,
-            )
-        ]
+    entity = TraktScrobblerMediaPlayer(
+        hass,
+        name,
+        client_id,
+        client_secret,
+        access_token,
+        refresh_token,
+        media_players,
+        check_entities,
+        scrobble_percentage,
+        update_watching,
+        plex_server_url,
+        plex_token,
     )
+
+    # Register the entity so the history-import service can reach its
+    # Plex + Trakt access.
+    hass.data.setdefault(DOMAIN, {}).setdefault("entities", {})[
+        config_entry.entry_id
+    ] = entity
+
+    async_add_entities([entity])
 
 
 class TraktScrobblerMediaPlayer(MediaPlayerEntity):
