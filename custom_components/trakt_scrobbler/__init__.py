@@ -8,10 +8,14 @@ import voluptuous as vol
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     ATTR_DRY_RUN,
     ATTR_START_DATE,
+    CONF_AUTO_SYNC_HISTORY,
+    CONF_AUTO_SYNC_INTERVAL_HOURS,
+    DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
     DOMAIN,
     SERVICE_IMPORT_PLEX_HISTORY,
 )
@@ -50,8 +54,40 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
 
     _async_register_services(hass)
+    _async_setup_auto_sync(hass, entry, config)
 
     return True
+
+
+def _async_setup_auto_sync(
+    hass: core.HomeAssistant,
+    entry: config_entries.ConfigEntry,
+    config: dict,
+) -> None:
+    """Schedule the periodic Plex-to-Trakt history sync when enabled."""
+    if not config.get(CONF_AUTO_SYNC_HISTORY, False):
+        return
+
+    hours = config.get(
+        CONF_AUTO_SYNC_INTERVAL_HOURS, DEFAULT_AUTO_SYNC_INTERVAL_HOURS
+    )
+    try:
+        hours = max(1, int(hours))
+    except (TypeError, ValueError):
+        hours = DEFAULT_AUTO_SYNC_INTERVAL_HOURS
+
+    async def _run_auto_sync(_now) -> None:
+        entities = list(hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {}).values())
+        if not entities:
+            return
+        summary = await HistorySync(entities[0]).async_auto_sync()
+        _LOGGER.debug("Auto history sync finished: %s", summary)
+
+    cancel = async_track_time_interval(
+        hass, _run_auto_sync, timedelta(hours=hours)
+    )
+    entry.async_on_unload(cancel)
+    _LOGGER.debug("Auto history sync scheduled every %d hour(s)", hours)
 
 
 def _async_register_services(hass: core.HomeAssistant) -> None:

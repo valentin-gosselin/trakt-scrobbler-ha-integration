@@ -20,6 +20,8 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    CONF_AUTO_SYNC_HISTORY,
+    CONF_AUTO_SYNC_INTERVAL_HOURS,
     CONF_CHECK_ENTITY,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
@@ -28,6 +30,8 @@ from .const import (
     CONF_PLEX_TOKEN,
     CONF_SCROBBLE_PERCENTAGE,
     CONF_UPDATE_WATCHING,
+    DEFAULT_AUTO_SYNC_HISTORY,
+    DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
     DEFAULT_SCROBBLE_PERCENTAGE,
     DEFAULT_UPDATE_WATCHING,
     DOMAIN,
@@ -307,6 +311,25 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.data.get(CONF_PLEX_TOKEN, "")
                     ),
                 ): str,
+                vol.Required(
+                    CONF_AUTO_SYNC_HISTORY,
+                    default=self.config_entry.options.get(
+                        CONF_AUTO_SYNC_HISTORY,
+                        self.config_entry.data.get(
+                            CONF_AUTO_SYNC_HISTORY, DEFAULT_AUTO_SYNC_HISTORY
+                        ),
+                    ),
+                ): bool,
+                vol.Required(
+                    CONF_AUTO_SYNC_INTERVAL_HOURS,
+                    default=self.config_entry.options.get(
+                        CONF_AUTO_SYNC_INTERVAL_HOURS,
+                        self.config_entry.data.get(
+                            CONF_AUTO_SYNC_INTERVAL_HOURS,
+                            DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
+                        ),
+                    ),
+                ): int,
             }
         )
 

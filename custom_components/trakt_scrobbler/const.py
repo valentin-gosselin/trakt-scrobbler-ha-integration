@@ -15,6 +15,8 @@ CONF_UPDATE_WATCHING = "update_watching"
 CONF_PLEX_SERVER_URL = "plex_server_url"
 CONF_PLEX_TOKEN = "plex_token"
 CONF_DEBUG_MODE = "debug_mode"
+CONF_AUTO_SYNC_HISTORY = "auto_sync_history"
+CONF_AUTO_SYNC_INTERVAL_HOURS = "auto_sync_interval_hours"
 
 # OAuth URLs
 OAUTH_AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"
@@ -48,6 +50,8 @@ STORAGE_KEY_LAST_SYNC = "last_history_sync"
 DEFAULT_SCROBBLE_PERCENTAGE = 80
 DEFAULT_UPDATE_WATCHING = True
 DEFAULT_DEBUG_MODE = False
+DEFAULT_AUTO_SYNC_HISTORY = False
+DEFAULT_AUTO_SYNC_INTERVAL_HOURS = 6
 MIN_DURATION_SECONDS = 300  # 5 minutes for movies
 MIN_EPISODE_DURATION_SECONDS = 60  # 1 minute for episodes (Bref, Kaamelott, etc.)
 

@@ -12,14 +12,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 
+from homeassistant.helpers.storage import Store
+
 from .const import (
+    DOMAIN,
     HISTORY_BATCH_SIZE,
     MEDIA_TYPE_EPISODE,
     MEDIA_TYPE_MOVIE,
+    STORAGE_KEY_LAST_SYNC,
     SYNC_HISTORY,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
 
 
 def _to_utc_iso(value) -> str | None:
@@ -73,6 +79,67 @@ class HistorySync:
         """Bind to a scrobbler entity that provides Plex + Trakt access."""
         self._entity = entity
         self._hass = entity.hass
+        self._store = Store(
+            entity.hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_LAST_SYNC}"
+        )
+
+    async def _async_get_last_sync(self) -> datetime | None:
+        """Return the datetime of the most recently synced watch, if any."""
+        data = await self._store.async_load()
+        if not data or not data.get("last_watched_at"):
+            return None
+        try:
+            return datetime.fromisoformat(data["last_watched_at"])
+        except ValueError:
+            return None
+
+    async def _async_set_last_sync(self, value: datetime) -> None:
+        """Persist the datetime of the most recently synced watch."""
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        await self._store.async_save({"last_watched_at": value.isoformat()})
+
+    async def async_auto_sync(self) -> dict:
+        """Incremental sync: push Plex watches newer than the last sync point.
+
+        Runs with dry_run disabled. Uses the stored last-sync date as the start
+        date (falling back to the last 7 days on first run), then advances the
+        stored point to the newest watch it saw so the next run only covers new
+        history.
+        """
+        last = await self._async_get_last_sync()
+        if last is None:
+            from datetime import timedelta
+
+            last = datetime.now(timezone.utc) - timedelta(days=7)
+            _LOGGER.debug("No previous sync point, starting from %s", last.isoformat())
+
+        newest = await self._async_newest_plex_watch(last)
+        summary = await self.async_import(last, dry_run=False)
+
+        # Advance the stored point only if the run didn't error out, so a failed
+        # run is retried next time instead of silently skipping history.
+        if newest is not None and summary.get("errors", 0) == 0:
+            await self._async_set_last_sync(newest)
+        return summary
+
+    async def _async_newest_plex_watch(self, since: datetime) -> datetime | None:
+        """Return the most recent viewedAt among Plex history since a date."""
+        plex = self._entity._plex_server
+        if plex is None:
+            return None
+        try:
+            items = await self._hass.async_add_executor_job(
+                lambda: plex.history(mindate=since)
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        newest = None
+        for item in items:
+            viewed = getattr(item, "viewedAt", None)
+            if isinstance(viewed, datetime) and (newest is None or viewed > newest):
+                newest = viewed
+        return newest
 
     async def async_import(self, start_date: datetime, dry_run: bool = True) -> dict:
         """Run the backfill.
