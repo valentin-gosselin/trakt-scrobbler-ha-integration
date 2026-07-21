@@ -17,6 +17,12 @@ CONF_PLEX_TOKEN = "plex_token"
 CONF_DEBUG_MODE = "debug_mode"
 CONF_AUTO_SYNC_HISTORY = "auto_sync_history"
 CONF_AUTO_SYNC_INTERVAL_HOURS = "auto_sync_interval_hours"
+CONF_PLEX_CLIENT_ID = "plex_client_id"
+
+# Plex authentication (PIN flow via plex.tv)
+PLEX_PRODUCT = "Home Assistant Trakt Scrobbler"
+PLEX_PINS_URL = "https://plex.tv/api/v2/pins"
+PLEX_AUTH_APP_URL = "https://app.plex.tv/auth"
 
 # OAuth URLs
 OAUTH_AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"

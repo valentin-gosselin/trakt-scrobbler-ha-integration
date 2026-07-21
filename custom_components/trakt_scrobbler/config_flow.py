@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+import uuid
 
 import aiohttp
 import voluptuous as vol
@@ -19,6 +20,8 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
 )
 
+from . import plex_auth
+
 from .const import (
     CONF_AUTO_SYNC_HISTORY,
     CONF_AUTO_SYNC_INTERVAL_HOURS,
@@ -26,6 +29,7 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_MEDIA_PLAYERS,
+    CONF_PLEX_CLIENT_ID,
     CONF_PLEX_SERVER_URL,
     CONF_PLEX_TOKEN,
     CONF_SCROBBLE_PERCENTAGE,
@@ -57,6 +61,8 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._data = {}
         self._device_info = None
         self._errors = {}
+        self._plex_pin_id = None
+        self._plex_auth_url = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -133,19 +139,12 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Store all configuration
             self._data.update(user_input)
-            
+
             # Check if all optional fields have default values
             self._data.setdefault(CONF_CHECK_ENTITY, [])
-            
-            # Create unique title
-            existing_entries = self._async_current_entries()
-            if existing_entries:
-                count = len(existing_entries) + 1
-                title = f"{user_input[CONF_NAME]} {count}"
-            else:
-                title = user_input[CONF_NAME]
-                
-            return self.async_create_entry(title=title, data=self._data)
+
+            # Move on to the optional Plex connection step.
+            return await self.async_step_plex_ask()
 
         schema = vol.Schema(
             {
@@ -170,14 +169,95 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
-                vol.Optional(CONF_PLEX_SERVER_URL): str,
-                vol.Optional(CONF_PLEX_TOKEN): str,
             }
         )
 
         return self.async_show_form(
             step_id="options", data_schema=schema, errors=errors
         )
+
+    async def async_step_plex_ask(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Ask whether to connect a Plex account (optional)."""
+        if user_input is not None:
+            if user_input.get("connect_plex"):
+                return await self.async_step_plex_pin()
+            # Skip Plex entirely and finish.
+            return self._create_entry()
+
+        schema = vol.Schema({vol.Required("connect_plex", default=False): bool})
+        return self.async_show_form(step_id="plex_ask", data_schema=schema)
+
+    async def async_step_plex_pin(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Generate a Plex PIN and wait for the user to authorize it."""
+        # Stable client identifier for this integration instance.
+        if not self._data.get(CONF_PLEX_CLIENT_ID):
+            self._data[CONF_PLEX_CLIENT_ID] = str(uuid.uuid4())
+        client_id = self._data[CONF_PLEX_CLIENT_ID]
+
+        if user_input is not None:
+            # User clicked submit after authorizing: check the PIN.
+            token = await plex_auth.async_check_pin(self._plex_pin_id, client_id)
+            if not token:
+                return self.async_show_form(
+                    step_id="plex_pin",
+                    errors={"base": "plex_not_authorized"},
+                    description_placeholders={"auth_url": self._plex_auth_url},
+                )
+            self._data[CONF_PLEX_TOKEN] = token
+            return await self.async_step_plex_server()
+
+        pin = await plex_auth.async_create_pin(client_id)
+        if not pin or not pin.get("code"):
+            return self.async_abort(reason="plex_pin_failed")
+        self._plex_pin_id = pin["id"]
+        self._plex_auth_url = plex_auth.build_auth_url(client_id, pin["code"])
+
+        return self.async_show_form(
+            step_id="plex_pin",
+            description_placeholders={"auth_url": self._plex_auth_url},
+        )
+
+    async def async_step_plex_server(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Discover the user's Plex servers and let them pick one."""
+        token = self._data[CONF_PLEX_TOKEN]
+
+        if user_input is not None:
+            self._data[CONF_PLEX_SERVER_URL] = user_input[CONF_PLEX_SERVER_URL]
+            return self._create_entry()
+
+        try:
+            servers = await self.hass.async_add_executor_job(
+                plex_auth.discover_servers, token
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to discover Plex servers: %s", err)
+            servers = []
+
+        if not servers:
+            # Authenticated but no server found: finish without a server URL.
+            return self._create_entry()
+
+        options = {s["url"]: f"{s['name']} ({s['url']})" for s in servers}
+        schema = vol.Schema(
+            {vol.Required(CONF_PLEX_SERVER_URL): vol.In(options)}
+        )
+        return self.async_show_form(step_id="plex_server", data_schema=schema)
+
+    def _create_entry(self) -> FlowResult:
+        """Create the config entry with a unique title."""
+        existing_entries = self._async_current_entries()
+        if existing_entries:
+            count = len(existing_entries) + 1
+            title = f"{self._data[CONF_NAME]} {count}"
+        else:
+            title = self._data[CONF_NAME]
+        return self.async_create_entry(title=title, data=self._data)
 
     async def _get_device_code(self):
         """Get device code from Trakt API."""

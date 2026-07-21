@@ -20,20 +20,37 @@
           "media_players": "Media Players to Monitor",
           "scrobble_percentage": "Scrobble at % watched",
           "update_watching": "Update 'Currently Watching' status",
-          "check_entity": "Only scrobble when these entities allow it",
-          "plex_server_url": "Plex Server URL (optional)",
-          "plex_token": "Plex Token (optional)"
+          "check_entity": "Only scrobble when these entities allow it"
+        }
+      },
+      "plex_ask": {
+        "title": "Connect Plex (optional)",
+        "description": "Plex is optional. Connect it to fetch richer metadata and to enable importing your Plex watch history into Trakt.",
+        "data": {
+          "connect_plex": "Connect my Plex account"
+        }
+      },
+      "plex_pin": {
+        "title": "Authorize Plex",
+        "description": "1. Open this link in your browser: **{auth_url}**\n2. Sign in and authorize the app\n3. Click Submit below"
+      },
+      "plex_server": {
+        "title": "Select Plex Server",
+        "data": {
+          "plex_server_url": "Plex server"
         }
       }
     },
     "error": {
       "device_code_failed": "Failed to get device code from Trakt",
       "token_poll_failed": "Failed to get access token. Please try again.",
+      "plex_not_authorized": "The Plex PIN has not been authorized yet. Authorize it in your browser, then click Submit.",
       "unknown": "Unknown error occurred"
     },
     "abort": {
       "no_device_info": "No device information available",
-      "token_poll_failed": "Could not get access token from Trakt"
+      "token_poll_failed": "Could not get access token from Trakt",
+      "plex_pin_failed": "Could not create a Plex PIN. Please try again."
     }
   },
   "options": {
@@ -46,7 +63,9 @@
           "update_watching": "Update 'Currently Watching' status",
           "check_entity": "Only scrobble when these entities allow it",
           "plex_server_url": "Plex Server URL (optional)",
-          "plex_token": "Plex Token (optional)"
+          "plex_token": "Plex Token (optional)",
+          "auto_sync_history": "Automatically sync Plex history to Trakt",
+          "auto_sync_interval_hours": "Auto-sync interval (hours)"
         }
       }
     }
