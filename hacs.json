@@ -1,10 +1,7 @@
 {
   "name": "Trakt Scrobbler",
-  "content_in_root": false,
   "render_readme": true,
   "domains": ["media_player"],
   "homeassistant": "2024.1.0",
-  "country": ["US", "FR", "DE", "ES", "GB"],
-  "zip_release": true,
-  "filename": "trakt_scrobbler.zip"
+  "country": ["US", "FR", "DE", "ES", "GB"]
 }
