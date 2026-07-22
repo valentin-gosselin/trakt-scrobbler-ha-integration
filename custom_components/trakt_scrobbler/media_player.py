@@ -462,7 +462,18 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                             metadata['media_season'] = item.seasonNumber
                             metadata['media_episode'] = item.episodeNumber
                             metadata['media_content_type'] = 'episode'
-                            
+
+                            # For episodes, the item's own guids identify the
+                            # EPISODE, not the show. The show is identified by the
+                            # grandparent guids. Use those so an ambiguous title
+                            # (e.g. The Killing DK vs the US remake) resolves to
+                            # the exact show the user is actually watching.
+                            show_guid_ids = plex_trakt.ids_from_plex_guids(
+                                getattr(item, "grandparentGuids", None)
+                            )
+                            for kind, value in show_guid_ids.items():
+                                metadata[f"show_{kind}_id"] = value
+
                         # Get external IDs if available (shared helper so the
                         # scrobbler and the history backfill parse guids alike).
                         guid_ids = plex_trakt.ids_from_plex_guids(
@@ -528,15 +539,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                 show_name = attrs.get("media_series_title")
                 season = attrs.get("media_season")
                 episode = attrs.get("media_episode")
-                
+
+                # Prefer the show's own ids (from the grandparent guids); the
+                # bare imdb/tmdb/tvdb ids belong to the episode and must not be
+                # used to identify the show.
+                show_ids = {}
+                for kind in ("imdb", "tmdb", "tvdb"):
+                    value = attrs.get(f"show_{kind}_id")
+                    if value:
+                        show_ids[kind] = value
+
                 media_obj["show"] = {
                     "title": show_name,
                 }
-                if ids:
-                    media_obj["show"]["ids"] = ids
+                if show_ids:
+                    media_obj["show"]["ids"] = show_ids
                 else:
-                    # Fallback: try with just title if no IDs available
-                    _LOGGER.debug("No external IDs found, using title only for: %s", show_name)
+                    # Fallback: try with just title if no show IDs available
+                    _LOGGER.debug("No external show IDs found, using title only for: %s", show_name)
                     
                 media_obj["episode"] = {
                     "season": season,
@@ -792,10 +812,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         
         # Format data for sync/history API
         if "show" in media_obj and "episode" in media_obj:
-            # Always use fallback search for TV episodes to get correct Trakt IDs
-            _LOGGER.debug("TV Episode: Using fallback search for correct Trakt IDs")
             show_title = media_obj["show"]["title"]
-            trakt_show = await self._search_trakt_show(show_title)
+            # Prefer the external ids Plex already gave us (imdb/tmdb/tvdb).
+            # They pin the exact edition, so we never confuse two shows that
+            # share a title (e.g. The Killing DK original vs the US remake).
+            # Only fall back to a title search when we have no ids at all.
+            show_ids = media_obj["show"].get("ids") or {}
+            if show_ids:
+                trakt_show = {"ids": show_ids, "title": show_title}
+                _LOGGER.debug(
+                    "TV Episode: using Plex ids for %s: %s", show_title, show_ids
+                )
+            else:
+                _LOGGER.debug(
+                    "TV Episode: no ids from Plex, falling back to title search for %s",
+                    show_title,
+                )
+                trakt_show = await self._search_trakt_show(show_title)
+
             if trakt_show:
                 sync_data = {
                     "shows": [
@@ -816,8 +850,8 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                         }
                     ]
                 }
-                _LOGGER.debug("Using Trakt show data: %s (TMDB: %s)", 
-                           trakt_show["title"], 
+                _LOGGER.debug("Using Trakt show data: %s (TMDB: %s)",
+                           trakt_show["title"],
                            trakt_show.get("ids", {}).get("tmdb", "N/A"))
             else:
                 _LOGGER.warning("Could not find show on Trakt: %s", show_title)
