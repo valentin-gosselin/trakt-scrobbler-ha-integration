@@ -28,6 +28,11 @@ from .const import (
     CONF_AUTO_SYNC_HISTORY,
     CONF_AUTO_SYNC_INTERVAL_HOURS,
     CONF_CHECK_ENTITY,
+    CONF_ENABLE_NEXT,
+    CONF_ENABLE_RECO,
+    CONF_ENABLE_STATS,
+    CONF_ENABLE_UPCOMING,
+    CONF_ENABLE_WATCHLIST,
     CONF_IMPORT_ON_SETUP,
     CONF_IMPORT_START_DATE,
     CONF_PLEX_LIBRARIES,
@@ -38,10 +43,17 @@ from .const import (
     CONF_PLEX_SERVER_URL,
     CONF_PLEX_TOKEN,
     CONF_SCROBBLE_PERCENTAGE,
+    CONF_UPCOMING_DAYS,
     CONF_UPDATE_WATCHING,
     DEFAULT_AUTO_SYNC_HISTORY,
     DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
+    DEFAULT_ENABLE_NEXT,
+    DEFAULT_ENABLE_RECO,
+    DEFAULT_ENABLE_STATS,
+    DEFAULT_ENABLE_UPCOMING,
+    DEFAULT_ENABLE_WATCHLIST,
     DEFAULT_SCROBBLE_PERCENTAGE,
+    DEFAULT_UPCOMING_DAYS,
     DEFAULT_UPDATE_WATCHING,
     DOMAIN,
     TRAKT_API_URL,
@@ -507,7 +519,43 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         ),
                     ),
                 ): int,
+                vol.Required(
+                    CONF_ENABLE_UPCOMING, default=self._opt(
+                        CONF_ENABLE_UPCOMING, DEFAULT_ENABLE_UPCOMING
+                    )
+                ): bool,
+                vol.Required(
+                    CONF_UPCOMING_DAYS, default=self._opt(
+                        CONF_UPCOMING_DAYS, DEFAULT_UPCOMING_DAYS
+                    )
+                ): int,
+                vol.Required(
+                    CONF_ENABLE_NEXT, default=self._opt(
+                        CONF_ENABLE_NEXT, DEFAULT_ENABLE_NEXT
+                    )
+                ): bool,
+                vol.Required(
+                    CONF_ENABLE_WATCHLIST, default=self._opt(
+                        CONF_ENABLE_WATCHLIST, DEFAULT_ENABLE_WATCHLIST
+                    )
+                ): bool,
+                vol.Required(
+                    CONF_ENABLE_STATS, default=self._opt(
+                        CONF_ENABLE_STATS, DEFAULT_ENABLE_STATS
+                    )
+                ): bool,
+                vol.Required(
+                    CONF_ENABLE_RECO, default=self._opt(
+                        CONF_ENABLE_RECO, DEFAULT_ENABLE_RECO
+                    )
+                ): bool,
             }
         )
 
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    def _opt(self, key, default):
+        """Read an option with fallback to entry data then a default."""
+        return self.config_entry.options.get(
+            key, self.config_entry.data.get(key, default)
+        )

@@ -11,6 +11,7 @@ import logging
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_info import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -76,6 +77,11 @@ class TraktBaseSensor(CoordinatorEntity, SensorEntity):
         self._entry = entry
         self._key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Trakt Scrobbler",
+            manufacturer="Trakt",
+        )
 
 
 class TraktUpcomingSensor(TraktBaseSensor):
