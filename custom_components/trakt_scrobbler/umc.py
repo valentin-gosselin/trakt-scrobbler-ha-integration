@@ -140,6 +140,22 @@ def next_to_watch_to_umc(entry: dict) -> dict:
     }
 
 
+def recommendation_to_umc(obj: dict, kind: str) -> dict:
+    """Map a recommended show/movie object to a UMC item."""
+    year = obj.get("year")
+    return {
+        "title": obj.get("title"),
+        "episode": str(year) if year else "",
+        "airdate": "",
+        "release": str(year) if year else "",
+        "poster": _image_url(obj.get("images"), "poster"),
+        "fanart": _image_url(obj.get("images"), "fanart"),
+        "rating": _round1(obj.get("rating")),
+        "genres": ", ".join(obj.get("genres") or []),
+        "deep_link": _trakt_link(kind[:-1] if kind.endswith("s") else kind, obj.get("ids")),
+    }
+
+
 def _trakt_link(kind: str, ids: dict | None) -> str:
     """Build a trakt.tv link for a show/movie from its ids."""
     if not ids:

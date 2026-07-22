@@ -28,6 +28,7 @@ from .options import enabled_groups
 from .umc import (
     movie_calendar_to_umc,
     next_to_watch_to_umc,
+    recommendation_to_umc,
     show_calendar_to_umc,
     umc_data,
 )
@@ -279,6 +280,7 @@ class TraktRecommendationsSensor(TraktBaseSensor):
     @property
     def extra_state_attributes(self) -> dict:
         items = []
+        mapped = []
         for obj in self._items:
             items.append(
                 {
@@ -288,4 +290,14 @@ class TraktRecommendationsSensor(TraktBaseSensor):
                     "overview": obj.get("overview"),
                 }
             )
-        return {"count": len(items), "items": items}
+        empty = (
+            "No recommendations"
+            if self._kind == "shows"
+            else "No recommendations"
+        )
+        mapped = [recommendation_to_umc(o, self._kind) for o in self._items]
+        return {
+            "count": len(items),
+            "items": items,
+            "data": umc_data(mapped, empty),
+        }
