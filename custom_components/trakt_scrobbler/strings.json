@@ -39,6 +39,14 @@
         "data": {
           "plex_server_url": "Plex server"
         }
+      },
+      "import_ask": {
+        "title": "Import Plex history now?",
+        "description": "Optionally backfill your Trakt history from Plex right after setup. Leave the start date empty to import all available history, or set it (for example your TV Time import date) to only import from then on.",
+        "data": {
+          "import_on_setup": "Import my Plex watch history into Trakt now",
+          "import_start_date": "Start date (optional)"
+        }
       }
     },
     "error": {

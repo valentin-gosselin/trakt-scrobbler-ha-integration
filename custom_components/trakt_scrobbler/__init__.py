@@ -15,6 +15,8 @@ from .const import (
     ATTR_START_DATE,
     CONF_AUTO_SYNC_HISTORY,
     CONF_AUTO_SYNC_INTERVAL_HOURS,
+    CONF_IMPORT_ON_SETUP,
+    CONF_IMPORT_START_DATE,
     DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
     DOMAIN,
     SERVICE_IMPORT_PLEX_HISTORY,
@@ -55,8 +57,47 @@ async def async_setup_entry(
 
     _async_register_services(hass)
     _async_setup_auto_sync(hass, entry, config)
+    _async_maybe_import_on_setup(hass, entry, config)
 
     return True
+
+
+def _async_maybe_import_on_setup(
+    hass: core.HomeAssistant,
+    entry: config_entries.ConfigEntry,
+    config: dict,
+) -> None:
+    """Run a one-shot Plex history backfill if requested during setup.
+
+    The request is stored on the entry; we consume it once (in the background)
+    and then clear it so it never runs again on later restarts.
+    """
+    if not config.get(CONF_IMPORT_ON_SETUP):
+        return
+
+    start_raw = config.get(CONF_IMPORT_START_DATE)
+
+    async def _run_import() -> None:
+        entities = list(hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {}).values())
+        if not entities:
+            return
+        # Empty date means "all available history".
+        if start_raw:
+            start = datetime.fromisoformat(start_raw)
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+        else:
+            start = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        summary = await HistorySync(entities[0]).async_import(start, dry_run=False)
+        _LOGGER.info("Initial Plex history import finished: %s", summary)
+
+    # Clear the one-shot flags so this doesn't repeat on the next restart.
+    new_data = dict(entry.data)
+    new_data.pop(CONF_IMPORT_ON_SETUP, None)
+    new_data.pop(CONF_IMPORT_START_DATE, None)
+    hass.config_entries.async_update_entry(entry, data=new_data)
+
+    hass.async_create_task(_run_import())
 
 
 def _async_setup_auto_sync(

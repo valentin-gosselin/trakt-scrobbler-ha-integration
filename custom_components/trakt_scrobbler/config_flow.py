@@ -15,6 +15,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
+    DateTimeSelector,
     EntityFilterSelectorConfig,
     EntitySelector,
     EntitySelectorConfig,
@@ -26,6 +27,8 @@ from .const import (
     CONF_AUTO_SYNC_HISTORY,
     CONF_AUTO_SYNC_INTERVAL_HOURS,
     CONF_CHECK_ENTITY,
+    CONF_IMPORT_ON_SETUP,
+    CONF_IMPORT_START_DATE,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_MEDIA_PLAYERS,
@@ -249,7 +252,7 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data[CONF_PLEX_SERVER_URL] = user_input[CONF_PLEX_SERVER_URL]
-            return self._create_entry()
+            return await self.async_step_import_ask()
 
         try:
             servers = await self.hass.async_add_executor_job(
@@ -268,6 +271,29 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {vol.Required(CONF_PLEX_SERVER_URL): vol.In(options)}
         )
         return self.async_show_form(step_id="plex_server", data_schema=schema)
+
+    async def async_step_import_ask(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Offer to backfill Plex watch history into Trakt right after setup."""
+        if user_input is not None:
+            if user_input.get(CONF_IMPORT_ON_SETUP):
+                # Stored in the entry; async_setup_entry runs the backfill once
+                # in the background, then clears these keys.
+                self._data[CONF_IMPORT_ON_SETUP] = True
+                start = user_input.get(CONF_IMPORT_START_DATE)
+                self._data[CONF_IMPORT_START_DATE] = (
+                    start.isoformat() if start else None
+                )
+            return self._create_entry()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_IMPORT_ON_SETUP, default=False): bool,
+                vol.Optional(CONF_IMPORT_START_DATE): DateTimeSelector(),
+            }
+        )
+        return self.async_show_form(step_id="import_ask", data_schema=schema)
 
     def _create_entry(self) -> FlowResult:
         """Create the config entry with a unique title."""
