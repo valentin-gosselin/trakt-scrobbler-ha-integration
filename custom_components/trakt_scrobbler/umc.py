@@ -79,10 +79,11 @@ def umc_data(items: list, empty_message: str = "Nothing here") -> list:
     """Wrap UMC items with the header, or a placeholder when the list is empty.
 
     The Upcoming Media Card shows a loading bar when it only gets the header
-    with no items, so we add a single placeholder item for empty states.
+    with no items, so we add a single placeholder item for empty states. The
+    placeholder is flagged so our own card can localize it and hide actions.
     """
     if not items:
-        return [umc_header(), {"title": empty_message, "airdate": ""}]
+        return [umc_header(), {"title": empty_message, "airdate": "", "empty": True}]
     return [umc_header(), *items]
 
 

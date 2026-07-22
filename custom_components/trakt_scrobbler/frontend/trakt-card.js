@@ -142,22 +142,31 @@ class TraktCard extends HTMLElement {
   _renderList(st) {
     const attrs = st.attributes || {};
     // Prefer the enriched `items` (poster/rating/link); fall back to `data`.
+    // If the sensor's data has a flagged empty placeholder, show a localized
+    // empty message with no items or action buttons.
+    const data = Array.isArray(attrs.data) ? attrs.data.slice(1) : [];
+    if (data.length === 1 && data[0] && data[0].empty) {
+      this._card(`<div class="tk-empty">${this._esc(this._t("empty"))}</div>`);
+      return;
+    }
+
     let items = attrs.items;
     if (!Array.isArray(items) || !items.length) {
-      const data = Array.isArray(attrs.data) ? attrs.data.slice(1) : [];
-      items = data.map((d) => ({
-        title: d.title,
-        subtitle: d.episode,
-        release: d.release,
-        poster: d.poster,
-        rating: d.rating,
-        genres: d.genres,
-        number: d.number,
-        link: d.deep_link,
-        ids: d.ids,
-        season: d.season,
-        number_int: d.number_int,
-      }));
+      items = data
+        .filter((d) => d && !d.empty)
+        .map((d) => ({
+          title: d.title,
+          subtitle: d.episode,
+          release: d.release,
+          poster: d.poster,
+          rating: d.rating,
+          genres: d.genres,
+          number: d.number,
+          link: d.deep_link,
+          ids: d.ids,
+          season: d.season,
+          number_int: d.number_int,
+        }));
     }
     const max = this._config.max || 20;
     items = (items || []).filter((it) => it && it.title).slice(0, max);
@@ -190,18 +199,32 @@ class TraktCard extends HTMLElement {
       ? `<a class="tk-title tk-link" href="${it.link}" target="_blank" rel="noopener">${this._esc(it.title)}</a>`
       : `<div class="tk-title">${this._esc(it.title)}</div>`;
 
-    // Quick actions: mark watched (episodes/movies) and add to watchlist.
-    const actions = `
-      <div class="tk-actions">
-        <ha-icon-button class="tk-act" data-act="watched" data-idx="${index}"
-          title="${this._esc(this._t("mark_watched"))}">
-          <ha-icon icon="mdi:check"></ha-icon>
-        </ha-icon-button>
-        <ha-icon-button class="tk-act" data-act="watchlist" data-idx="${index}"
-          title="${this._esc(this._t("add_watchlist"))}">
-          <ha-icon icon="mdi:bookmark-plus-outline"></ha-icon>
-        </ha-icon-button>
-      </div>`;
+    // Quick actions depend on the view:
+    // - recommendations: "add to watchlist" (content not yet followed)
+    // - upcoming / next_to_watch: "mark watched"
+    // - watchlist: no quick action (already there)
+    const buttons = [];
+    if (this._view === "recommendations") {
+      buttons.push(
+        `<ha-icon-button class="tk-act" data-act="watchlist" data-idx="${index}"
+           title="${this._esc(this._t("add_watchlist"))}">
+           <ha-icon icon="mdi:bookmark-plus-outline"></ha-icon>
+         </ha-icon-button>`
+      );
+    } else if (
+      this._view === "upcoming" ||
+      this._view === "next_to_watch"
+    ) {
+      buttons.push(
+        `<ha-icon-button class="tk-act" data-act="watched" data-idx="${index}"
+           title="${this._esc(this._t("mark_watched"))}">
+           <ha-icon icon="mdi:check"></ha-icon>
+         </ha-icon-button>`
+      );
+    }
+    const actions = buttons.length
+      ? `<div class="tk-actions">${buttons.join("")}</div>`
+      : "";
 
     return `
       <div class="tk-item">
@@ -222,14 +245,13 @@ class TraktCard extends HTMLElement {
         const idx = parseInt(btn.getAttribute("data-idx"), 10);
         const act = btn.getAttribute("data-act");
         const item = (this._items || [])[idx];
-        if (item) this._doAction(act, item);
+        if (item) this._doAction(act, item, btn);
       });
     });
   }
 
-  _doAction(act, item) {
+  async _doAction(act, item, btn) {
     const ids = item.ids || {};
-    // Prefer the show ids for episodes; the sensor items carry show ids.
     const idFields = {};
     for (const k of ["trakt", "imdb", "tmdb", "tvdb"]) {
       if (ids[k]) idFields[k] = String(ids[k]);
@@ -237,24 +259,43 @@ class TraktCard extends HTMLElement {
     const isEpisode = !!item.number || this._view === "next_to_watch";
     const mediaType = isEpisode ? "show" : "movie";
 
-    if (act === "watchlist") {
-      this._hass.callService("trakt_scrobbler", "add_to_watchlist", {
-        media_type: mediaType,
-        title: item.title,
-        ...idFields,
-      });
-    } else if (act === "watched") {
-      // mark_watched needs movie or episode; for shows in these lists we mark
-      // the specific episode when season/number are known, else the movie.
-      const data = { media_type: isEpisode ? "episode" : "movie", ...idFields };
-      if (isEpisode && item.season != null && item.number_int != null) {
-        data.season = item.season;
-        data.episode = item.number_int;
-      }
-      if (item.title) data.title = item.title;
-      this._hass.callService("trakt_scrobbler", "mark_watched", data);
+    // Immediate visual feedback: fade the row out.
+    const row = btn ? btn.closest(".tk-item") : null;
+    if (row) {
+      row.style.transition = "opacity .2s";
+      row.style.opacity = "0.35";
     }
-    this._toast(act);
+
+    try {
+      if (act === "watchlist") {
+        await this._hass.callService("trakt_scrobbler", "add_to_watchlist", {
+          media_type: mediaType,
+          title: item.title,
+          ...idFields,
+        });
+      } else if (act === "watched") {
+        const data = {
+          media_type: isEpisode ? "episode" : "movie",
+          ...idFields,
+        };
+        if (isEpisode && item.season != null && item.number_int != null) {
+          data.season = item.season;
+          data.episode = item.number_int;
+        }
+        if (item.title) data.title = item.title;
+        await this._hass.callService("trakt_scrobbler", "mark_watched", data);
+      }
+      this._toast(act);
+      // Refresh the sensor so the item disappears / the next episode shows up.
+      // Give Trakt a moment to register the change first.
+      setTimeout(() => {
+        this._hass.callService("homeassistant", "update_entity", {
+          entity_id: this._entity,
+        });
+      }, 1500);
+    } catch (err) {
+      if (row) row.style.opacity = "1";
+    }
   }
 
   _toast(act) {
