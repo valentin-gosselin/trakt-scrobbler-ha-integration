@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_PLEX_SERVER_URL,
+    CONF_PLEX_LIBRARIES,
     CONF_PLEX_TOKEN,
     ATTR_EPISODE,
     ATTR_IMDB_ID,
@@ -71,7 +72,8 @@ async def async_setup_entry(
     # Setup Plex (optional)
     plex_server_url = config.get(CONF_PLEX_SERVER_URL)
     plex_token = config.get(CONF_PLEX_TOKEN)
-    
+    plex_libraries = config.get(CONF_PLEX_LIBRARIES, [])
+
     entity = TraktScrobblerMediaPlayer(
         hass,
         name,
@@ -85,6 +87,7 @@ async def async_setup_entry(
         update_watching,
         plex_server_url,
         plex_token,
+        plex_libraries,
     )
 
     # Register the entity so the history-import service can reach its
@@ -113,10 +116,13 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         update_watching,
         plex_server_url,
         plex_token,
+        plex_libraries=None,
     ) -> None:
         """Initialize the Trakt scrobbler."""
         self.hass = hass
         self._name = name
+        # Plex library section keys to import/scrobble from ([] means all).
+        self._plex_libraries = [str(k) for k in (plex_libraries or [])]
         self._attr_unique_id = f"{DOMAIN}-{name}"
         self._state = None
         self._current_media = None
@@ -425,8 +431,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                     )
                     
                     if item:
+                        # Skip items from libraries the user chose not to
+                        # scrobble (e.g. personal home videos), if a filter is
+                        # configured.
+                        if self._plex_libraries:
+                            section_id = str(
+                                getattr(item, "librarySectionID", "") or ""
+                            )
+                            if section_id and section_id not in self._plex_libraries:
+                                _LOGGER.debug(
+                                    "Skipping Plex item from unselected library "
+                                    "(section %s): %s",
+                                    section_id,
+                                    getattr(item, "title", "?"),
+                                )
+                                return None
+
                         metadata = {}
-                        
+
                         # Determine if it's a movie or episode
                         if item.type == 'movie':
                             metadata['media_title'] = item.title

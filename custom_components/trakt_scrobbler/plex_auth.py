@@ -119,3 +119,27 @@ def discover_servers(token: str) -> list[dict]:
     # Show reachable servers first so the default selection is a working one.
     servers.sort(key=lambda s: not s["reachable"])
     return servers
+
+
+def list_libraries(server_url: str, token: str) -> list[dict]:
+    """List the movie/show libraries of a Plex server.
+
+    Returns [{'key', 'title', 'type'}]. Runs plexapi (synchronous) - call via
+    async_add_executor_job. Only video libraries are returned, since music and
+    photo sections are never scrobbled to Trakt.
+    """
+    from plexapi.server import PlexServer
+
+    plex = PlexServer(server_url, token)
+    libraries: list[dict] = []
+    for section in plex.library.sections():
+        if section.type not in ("movie", "show"):
+            continue
+        libraries.append(
+            {
+                "key": str(section.key),
+                "title": section.title,
+                "type": section.type,
+            }
+        )
+    return libraries

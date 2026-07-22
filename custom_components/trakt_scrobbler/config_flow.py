@@ -14,6 +14,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import (
     DateTimeSelector,
     EntityFilterSelectorConfig,
@@ -29,6 +30,7 @@ from .const import (
     CONF_CHECK_ENTITY,
     CONF_IMPORT_ON_SETUP,
     CONF_IMPORT_START_DATE,
+    CONF_PLEX_LIBRARIES,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_MEDIA_PLAYERS,
@@ -252,7 +254,7 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data[CONF_PLEX_SERVER_URL] = user_input[CONF_PLEX_SERVER_URL]
-            return await self.async_step_import_ask()
+            return await self.async_step_plex_libraries()
 
         try:
             servers = await self.hass.async_add_executor_job(
@@ -280,6 +282,46 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="plex_server", data_schema=schema)
+
+    async def async_step_plex_libraries(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Let the user pick which Plex libraries to import and scrobble from."""
+        if user_input is not None:
+            self._data[CONF_PLEX_LIBRARIES] = user_input.get(
+                CONF_PLEX_LIBRARIES, []
+            )
+            return await self.async_step_import_ask()
+
+        try:
+            libraries = await self.hass.async_add_executor_job(
+                plex_auth.list_libraries,
+                self._data[CONF_PLEX_SERVER_URL],
+                self._data[CONF_PLEX_TOKEN],
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to list Plex libraries: %s", err)
+            libraries = []
+
+        if not libraries:
+            # Could not list libraries: proceed without a filter (import all).
+            self._data[CONF_PLEX_LIBRARIES] = []
+            return await self.async_step_import_ask()
+
+        options = {
+            lib["key"]: f"{lib['title']} ({lib['type']})" for lib in libraries
+        }
+        # Default: all libraries selected, so nothing is silently dropped.
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_PLEX_LIBRARIES, default=list(options.keys())
+                ): cv.multi_select(options)
+            }
+        )
+        return self.async_show_form(
+            step_id="plex_libraries", data_schema=schema
+        )
 
     async def async_step_import_ask(
         self, user_input: dict[str, Any] | None = None

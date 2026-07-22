@@ -18,6 +18,9 @@ CONF_DEBUG_MODE = "debug_mode"
 CONF_AUTO_SYNC_HISTORY = "auto_sync_history"
 CONF_AUTO_SYNC_INTERVAL_HOURS = "auto_sync_interval_hours"
 CONF_PLEX_CLIENT_ID = "plex_client_id"
+# Plex library section keys the user chose to import/scrobble from. Empty or
+# missing means "all video libraries" (backward compatible).
+CONF_PLEX_LIBRARIES = "plex_libraries"
 # One-shot backfill requested during setup (consumed once, then cleared).
 CONF_IMPORT_ON_SETUP = "import_on_setup"
 CONF_IMPORT_START_DATE = "import_start_date"

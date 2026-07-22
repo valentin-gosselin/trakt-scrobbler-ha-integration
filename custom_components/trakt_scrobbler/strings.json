@@ -40,6 +40,13 @@
           "plex_server_url": "Plex server"
         }
       },
+      "plex_libraries": {
+        "title": "Select Plex Libraries",
+        "description": "Choose which Plex libraries to scrobble and import from. Unselect libraries you don't want on Trakt, such as personal or home video libraries.",
+        "data": {
+          "plex_libraries": "Libraries to include"
+        }
+      },
       "import_ask": {
         "title": "Import Plex history now?",
         "description": "Optionally backfill your Trakt history from Plex right after setup. Leave the start date empty to import all available history, or set it (for example your TV Time import date) to only import from then on.",

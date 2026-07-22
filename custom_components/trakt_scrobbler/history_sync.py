@@ -332,16 +332,43 @@ class HistorySync:
         return None
 
     def _read_own_history(self, plex, start_date):
-        """Read Plex history since start_date for the token's own account only."""
+        """Read Plex history since start_date for the token's own account only.
+
+        Also restricts to the user-selected libraries when configured, so
+        content in excluded libraries (e.g. personal home videos) is never
+        imported.
+        """
         account_id = self._resolve_account_id(plex)
-        if account_id is not None:
+        if account_id is None:
+            # Fallback: if we couldn't resolve the account, don't import
+            # anything rather than risk scrobbling other users' history.
+            _LOGGER.error(
+                "Refusing to import Plex history because the token's own "
+                "account could not be identified (avoids importing other "
+                "users' watches)"
+            )
+            return []
+
+        wanted = set(self._entity._plex_libraries or [])
+        if not wanted:
+            # No library filter configured: import all of the user's history.
             return plex.history(mindate=start_date, accountID=account_id)
-        # Fallback: if we couldn't resolve the account, don't import anything
-        # rather than risk scrobbling other users' history.
-        _LOGGER.error(
-            "Refusing to import Plex history because the token's own account "
-            "could not be identified (avoids importing other users' watches)"
-        )
+
+        # Query per selected library section so excluded libraries (home
+        # videos, etc.) never enter the backfill.
+        items: list = []
+        for section_key in wanted:
+            try:
+                items.extend(
+                    plex.history(
+                        mindate=start_date,
+                        accountID=account_id,
+                        librarySectionID=int(section_key),
+                    )
+                )
+            except (ValueError, Exception):  # noqa: BLE001
+                continue
+        return items
         return []
 
     def _map_items(self, items: list) -> list:
