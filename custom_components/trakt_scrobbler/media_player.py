@@ -11,6 +11,7 @@ from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.const import CONF_NAME, STATE_PLAYING, STATE_PAUSED
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -89,6 +90,7 @@ async def async_setup_entry(
         plex_server_url,
         plex_token,
         plex_libraries,
+        config_entry.entry_id,
     )
 
     # Register the entity so the history-import service can reach its
@@ -118,6 +120,7 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         plex_server_url,
         plex_token,
         plex_libraries=None,
+        entry_id=None,
     ) -> None:
         """Initialize the Trakt scrobbler."""
         self.hass = hass
@@ -125,6 +128,14 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         # Plex library section keys to import/scrobble from ([] means all).
         self._plex_libraries = [str(k) for k in (plex_libraries or [])]
         self._attr_unique_id = f"{DOMAIN}-{name}"
+        # Group under the same device as the Trakt sensors so the integration
+        # shows a single "Trakt Scrobbler" device with all its entities.
+        if entry_id:
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, entry_id)},
+                name="Trakt Scrobbler",
+                manufacturer="Trakt",
+            )
         self._state = None
         self._current_media = None
         self._media_type = None
