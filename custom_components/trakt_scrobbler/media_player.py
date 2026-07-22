@@ -474,14 +474,34 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                             metadata['media_episode'] = item.episodeNumber
                             metadata['media_content_type'] = 'episode'
 
-                            # For episodes, the item's own guids identify the
-                            # EPISODE, not the show. The show is identified by the
-                            # grandparent guids. Use those so an ambiguous title
-                            # (e.g. The Killing DK vs the US remake) resolves to
-                            # the exact show the user is actually watching.
+                            # The episode's own guids identify the EPISODE, not
+                            # the show. To resolve an ambiguous title (e.g. The
+                            # Killing DK original vs the US remake) we need the
+                            # SHOW's guids. Plex only fills grandparentGuids on
+                            # some servers, so fetch the show by its rating key
+                            # and read its guids directly.
                             show_guid_ids = plex_trakt.ids_from_plex_guids(
                                 getattr(item, "grandparentGuids", None)
                             )
+                            if not show_guid_ids:
+                                gp_key = getattr(
+                                    item, "grandparentRatingKey", None
+                                )
+                                if gp_key:
+                                    try:
+                                        show_item = await self.hass.async_add_executor_job(
+                                            self._plex_server.fetchItem,
+                                            int(gp_key),
+                                        )
+                                        show_guid_ids = plex_trakt.ids_from_plex_guids(
+                                            getattr(show_item, "guids", None)
+                                        )
+                                    except Exception as err:  # noqa: BLE001
+                                        _LOGGER.debug(
+                                            "Could not fetch show guids for %s: %s",
+                                            item.grandparentTitle,
+                                            err,
+                                        )
                             for kind, value in show_guid_ids.items():
                                 metadata[f"show_{kind}_id"] = value
 
