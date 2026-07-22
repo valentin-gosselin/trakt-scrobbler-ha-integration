@@ -233,6 +233,12 @@ class HistorySync:
             summary["to_add"] += 1
             to_push.append(entry)
 
+        # 5. For entries Plex couldn't tag with ids, try to resolve them on
+        #    Trakt by title (cached per title). This recovers real shows/movies
+        #    whose Plex metadata was unmatched, while personal home videos
+        #    simply won't be found and are skipped.
+        await self._async_resolve_missing_ids(to_push, summary)
+
         _LOGGER.info(
             "Backfill diff: %d found, %d already on Trakt, %d to add",
             summary["found"],
@@ -462,16 +468,7 @@ class HistorySync:
         pushed = 0
         for start in range(0, len(to_push), HISTORY_BATCH_SIZE):
             batch = to_push[start : start + HISTORY_BATCH_SIZE]
-            payload = {"movies": [], "episodes": []}
-            for entry in batch:
-                if entry["_type"] == MEDIA_TYPE_MOVIE:
-                    payload["movies"].append(
-                        {"watched_at": entry["watched_at"], **_movie_body(entry)}
-                    )
-                else:
-                    payload["episodes"].append(
-                        {"watched_at": entry["watched_at"], **_episode_body(entry)}
-                    )
+            payload = _build_payload(batch)
             result = await self._entity._api_request(
                 SYNC_HISTORY, method="POST", data=payload
             )
@@ -480,7 +477,10 @@ class HistorySync:
                 _LOGGER.error("Failed to push a batch of %d items", len(batch))
                 continue
             added = result.get("added", {}) if isinstance(result, dict) else {}
-            pushed += (added.get("movies", 0) or 0) + (added.get("episodes", 0) or 0)
+            pushed += (
+                (added.get("movies", 0) or 0)
+                + (added.get("episodes", 0) or 0)
+            )
             _LOGGER.info(
                 "Pushed batch: Trakt added %s movies, %s episodes",
                 added.get("movies", 0),
@@ -488,41 +488,132 @@ class HistorySync:
             )
         return pushed
 
+    async def _async_resolve_missing_ids(
+        self, to_push: list[dict], summary: dict
+    ) -> None:
+        """Fill in Trakt ids for entries that have none, by title search.
 
-def _movie_body(entry: dict) -> dict:
-    """Return the movie fields of a /sync/history entry.
+        Searches Trakt for the show (episodes) or movie title and caches the
+        result per (type, title) so each show/movie is looked up once. Entries
+        that still can't be resolved (e.g. personal home videos) keep their
+        title-only form and will simply not match on Trakt.
+        """
+        cache: dict = {}
+        resolved = 0
+        for entry in to_push:
+            if entry.get("_ids"):
+                continue
+            if entry["_type"] == MEDIA_TYPE_EPISODE:
+                title = (entry.get("show", {}) or {}).get("title")
+                ids = await self._async_search_ids("show", title, cache)
+                if ids:
+                    entry["show"]["ids"] = ids
+                    entry["_ids"] = ids
+                    resolved += 1
+            else:
+                title = (entry.get("movie", {}) or {}).get("title")
+                ids = await self._async_search_ids("movie", title, cache)
+                if ids:
+                    entry["movie"]["ids"] = ids
+                    entry["_ids"] = ids
+                    resolved += 1
+        if resolved:
+            _LOGGER.info("Resolved %d entries by Trakt title search", resolved)
 
-    Trakt wants the movie's title/year/ids flat on the entry (not wrapped in a
-    "movie" object), matching primarily by ids.
+    async def _async_search_ids(
+        self, media_type: str, title: str | None, cache: dict
+    ) -> dict | None:
+        """Return Trakt ids for a show/movie title, using and filling a cache."""
+        if not title:
+            return None
+        key = (media_type, title.lower())
+        if key in cache:
+            return cache[key]
+        from urllib.parse import quote
+
+        endpoint = f"/search/{media_type}?query={quote(title)}&limit=1"
+        result = await self._entity._api_request(endpoint, method="GET")
+        ids = None
+        if isinstance(result, list) and result:
+            obj = result[0].get(media_type, {}) or {}
+            ids = obj.get("ids") or None
+            # Keep only the id kinds Trakt matches on for history.
+            if ids:
+                ids = {
+                    k: v
+                    for k, v in ids.items()
+                    if k in ("trakt", "imdb", "tmdb", "tvdb")
+                }
+        cache[key] = ids
+        return ids
+
+
+def _build_payload(batch: list[dict]) -> dict:
+    """Build a /sync/history payload from a batch of entries.
+
+    Trakt uses different shapes depending on what identifies each item:
+    - movie: flat {watched_at, ids, title, year} under "movies".
+    - episode with its own ids: {watched_at, ids} under "episodes".
+    - episode with only show ids (or title): nested under "shows" as
+      shows -> seasons -> episodes, which is the shape Trakt accepts for
+      identifying an episode via its show.
     """
-    movie = entry.get("movie", {}) or {}
-    body: dict = {}
-    if movie.get("ids"):
-        body["ids"] = movie["ids"]
-    if movie.get("title"):
-        body["title"] = movie["title"]
-    if movie.get("year"):
-        body["year"] = movie["year"]
-    return body
+    movies: list = []
+    episodes: list = []
+    # Group show-identified episodes: show key -> season -> [ (number, watched)]
+    shows: dict = {}
 
+    for entry in batch:
+        watched_at = entry["watched_at"]
+        if entry["_type"] == MEDIA_TYPE_MOVIE:
+            movie = entry.get("movie", {}) or {}
+            row: dict = {"watched_at": watched_at}
+            if movie.get("ids"):
+                row["ids"] = movie["ids"]
+            if movie.get("title"):
+                row["title"] = movie["title"]
+            if movie.get("year"):
+                row["year"] = movie["year"]
+            movies.append(row)
+            continue
 
-def _episode_body(entry: dict) -> dict:
-    """Return the episode portion of a /sync/history entry.
+        episode = entry.get("episode", {}) or {}
+        show = entry.get("show", {}) or {}
+        if episode.get("ids"):
+            episodes.append({"watched_at": watched_at, "ids": episode["ids"]})
+            continue
 
-    Trakt matches an episode most reliably by its own ids alone. When the
-    episode has ids we send just {ids}; otherwise we fall back to identifying it
-    by show title + season + episode number (which requires the show to be
-    resolvable by title on Trakt).
-    """
-    episode = entry.get("episode", {}) or {}
-    ids = episode.get("ids")
-    if ids:
-        return {"ids": ids}
-    # Fallback with no episode ids: identify via show title + season/number.
-    return {
-        "show": entry.get("show", {}),
-        "episode": {
-            "season": episode.get("season"),
-            "number": episode.get("number"),
-        },
-    }
+        # Identify via the show (ids preferred, else title) + season/number.
+        if show.get("ids"):
+            show_key = ("ids", tuple(sorted(show["ids"].items())))
+            show_ref = {"ids": show["ids"]}
+        elif show.get("title"):
+            show_key = ("title", show["title"].lower())
+            show_ref = {"title": show["title"]}
+        else:
+            continue
+        season = episode.get("season")
+        number = episode.get("number")
+        if season is None or number is None:
+            continue
+        bucket = shows.setdefault(show_key, {"ref": show_ref, "seasons": {}})
+        bucket["seasons"].setdefault(season, []).append(
+            {"number": number, "watched_at": watched_at}
+        )
+
+    shows_payload = []
+    for bucket in shows.values():
+        seasons = [
+            {"number": s_num, "episodes": eps}
+            for s_num, eps in bucket["seasons"].items()
+        ]
+        shows_payload.append({**bucket["ref"], "seasons": seasons})
+
+    payload: dict = {}
+    if movies:
+        payload["movies"] = movies
+    if episodes:
+        payload["episodes"] = episodes
+    if shows_payload:
+        payload["shows"] = shows_payload
+    return payload
