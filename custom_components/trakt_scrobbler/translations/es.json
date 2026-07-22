@@ -80,7 +80,13 @@
           "plex_server_url": "URL del servidor Plex (opcional)",
           "plex_token": "Token de Plex (opcional)",
           "auto_sync_history": "Sincronizar automáticamente el historial de Plex con Trakt",
-          "auto_sync_interval_hours": "Intervalo de sincronización automática (horas)"
+          "auto_sync_interval_hours": "Intervalo de sincronización automática (horas)",
+          "enable_upcoming": "Activar sensores de próximos episodios/películas",
+          "upcoming_days": "Ventana de próximos (días)",
+          "enable_next_to_watch": "Activar sensor «ver a continuación»",
+          "enable_watchlist": "Activar sensor de lista de seguimiento",
+          "enable_stats": "Activar sensor de estadísticas",
+          "enable_recommendations": "Activar sensores de recomendaciones"
         }
       }
     }

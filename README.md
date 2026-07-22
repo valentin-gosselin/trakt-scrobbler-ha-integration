@@ -15,6 +15,7 @@ A Home Assistant integration that automatically scrobbles what you're watching f
 - 🔐 Two-click setup: a built-in Trakt app means you just authorize, no API app to create
 - 🧩 Plex sign-in via PIN, automatic server discovery, and per-library selection
 - 📥 Import your existing Plex watch history into Trakt (great when migrating from another tracker), with optional automatic sync
+- 📅 Trakt data sensors (upcoming, next-to-watch, watchlist, stats, recommendations) and action services, so one Trakt app covers everything
 
 ## Requirements
 
@@ -106,6 +107,47 @@ This is useful for:
 - Only scrobbling when you're home
 - Having a "Do Not Scrobble" switch
 - Creating complex automation conditions
+
+## Trakt sensors
+
+Because this integration already holds your one Trakt app, it can also expose
+Trakt data as sensors, so you don't need the separate `sensor.trakt`
+integration. Enable the groups you want in the integration options (upcoming and
+next-to-watch are on by default):
+
+| Sensor | What it exposes |
+|---|---|
+| `sensor.upcoming_shows` / `sensor.upcoming_movies` | Your upcoming calendar. Attributes include a `data` array in Upcoming Media Card format. |
+| `sensor.next_to_watch` | The next unwatched, already-aired episode for each in-progress show. |
+| `sensor.watchlist` | Items on your Trakt watchlist. |
+| `sensor.stats` | Movies/episodes watched, shows, total minutes/days. |
+| `sensor.recommended_shows` / `sensor.recommended_movies` | Personalized recommendations. |
+
+### Example dashboard cards
+
+Upcoming shows with the [Upcoming Media Card](https://github.com/custom-cards/upcoming-media-card):
+
+```yaml
+type: custom:upcoming-media-card
+entity: sensor.upcoming_shows
+title: Upcoming Episodes
+```
+
+Next episode to watch:
+
+```yaml
+type: custom:upcoming-media-card
+entity: sensor.next_to_watch
+title: Next to Watch
+```
+
+## Trakt actions
+
+You can also act on Trakt from automations and scripts:
+
+- `trakt_scrobbler.add_to_watchlist` / `remove_from_watchlist`: add or remove a
+  movie or show by id (trakt/imdb/tmdb/tvdb) or by title.
+- `trakt_scrobbler.mark_watched`: mark a movie or an episode as watched.
 
 ## Supported Media Players
 

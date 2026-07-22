@@ -80,7 +80,13 @@
           "plex_server_url": "Plex Server URL (optional)",
           "plex_token": "Plex Token (optional)",
           "auto_sync_history": "Automatically sync Plex history to Trakt",
-          "auto_sync_interval_hours": "Auto-sync interval (hours)"
+          "auto_sync_interval_hours": "Auto-sync interval (hours)",
+          "enable_upcoming": "Enable upcoming shows/movies sensors",
+          "upcoming_days": "Upcoming window (days)",
+          "enable_next_to_watch": "Enable next-to-watch sensor",
+          "enable_watchlist": "Enable watchlist sensor",
+          "enable_stats": "Enable stats sensor",
+          "enable_recommendations": "Enable recommendations sensors"
         }
       }
     }

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-22
+
+### Added
+- **Trakt data sensors** (one integration, one Trakt app, so you no longer need the separate `sensor.trakt`):
+  - `sensor.upcoming_shows` / `sensor.upcoming_movies`: your upcoming calendar, with attributes in both a native form and an **Upcoming Media Card**-compatible `data` array (drop-in replacement).
+  - `sensor.next_to_watch`: the next unwatched, already-aired episode for each in-progress show.
+  - `sensor.watchlist`: your Trakt watchlist.
+  - `sensor.stats`: movies/episodes watched, shows, total minutes/days.
+  - `sensor.recommended_shows` / `sensor.recommended_movies`: personalized recommendations.
+- **Action services** to write to Trakt from automations:
+  - `add_to_watchlist`, `remove_from_watchlist`, `mark_watched` (by ids or title).
+- **Per-group toggles** in the options so you only get the sensors you want (upcoming and next-to-watch on by default), plus an upcoming-window setting in days.
+- All entities are grouped under a single Trakt device.
+
+### Changed
+- A shared data update coordinator fetches Trakt data on a polling interval, separate from real-time scrobbling. Rate limits are respected (next-to-watch caps how many shows it checks per refresh).
+
 ## [1.2.0] - 2026-07-22
 
 ### Added
