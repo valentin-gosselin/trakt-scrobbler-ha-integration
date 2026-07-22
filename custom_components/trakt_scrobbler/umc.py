@@ -13,15 +13,15 @@ import homeassistant.util.dt as dt_util
 def _to_local(iso: str | None) -> str:
     """Convert a Trakt ISO 8601 UTC timestamp to a local, readable string.
 
-    Returns e.g. '2026-07-24 03:00' in the Home Assistant time zone. Falls back
-    to the original value if it can't be parsed.
+    Uses day/month/year and the Home Assistant time zone (e.g.
+    '24/07/2026 03:00'). Falls back to the original value if it can't be parsed.
     """
     if not iso:
         return ""
     parsed = dt_util.parse_datetime(iso)
     if parsed is None:
         return iso
-    return dt_util.as_local(parsed).strftime("%Y-%m-%d %H:%M")
+    return dt_util.as_local(parsed).strftime("%d/%m/%Y %H:%M")
 
 
 def _round1(value) -> str:
@@ -49,12 +49,19 @@ def _image_url(images: dict | None, kind: str) -> str:
 
 
 def umc_header(title_default: str = "$title") -> dict:
-    """First element of the UMC data array: default field mapping."""
+    """First element of the UMC data array: default field mapping.
+
+    Lines shown by the Upcoming Media Card, kept simple and readable:
+    - line1: episode title
+    - line2: air date/time (localized)
+    - line3: SxxExx and the rating
+    - line4: genres
+    """
     return {
         "title_default": title_default,
         "line1_default": "$episode",
         "line2_default": "$release",
-        "line3_default": "$number - $rating - $runtime",
+        "line3_default": "$number - $rating",
         "line4_default": "$genres",
         "icon": "mdi:arrow-down-bold",
     }
