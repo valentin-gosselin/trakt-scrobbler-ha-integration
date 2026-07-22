@@ -54,9 +54,16 @@ async def _async_register_resource(hass: HomeAssistant) -> None:
             await resources.async_load()
             resources.loaded = True
 
-        # Skip if a resource for this card is already registered (any version).
+        # If a resource for this card already exists, update its URL when the
+        # version changed (cache-busting), otherwise leave it alone.
         for item in resources.async_items():
-            if item.get("url", "").startswith(_CARD_URL):
+            item_url = item.get("url", "")
+            if item_url.startswith(_CARD_URL):
+                if item_url != url:
+                    await resources.async_update_item(
+                        item["id"], {"res_type": "module", "url": url}
+                    )
+                    _LOGGER.debug("Updated Trakt card resource to %s", url)
                 return
 
         await resources.async_create_item({"res_type": "module", "url": url})
