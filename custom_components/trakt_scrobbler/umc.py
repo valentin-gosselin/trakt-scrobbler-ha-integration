@@ -24,6 +24,14 @@ def _to_local(iso: str | None) -> str:
     return dt_util.as_local(parsed).strftime("%d/%m/%Y %H:%M")
 
 
+def _ids(obj: dict | None) -> dict:
+    """Keep only the id kinds Trakt matches on, as strings for the card."""
+    ids = (obj or {}).get("ids") or {}
+    return {
+        k: str(ids[k]) for k in ("trakt", "imdb", "tmdb", "tvdb") if ids.get(k)
+    }
+
+
 def _round1(value) -> str:
     """Round a Trakt rating to one decimal for display; '' if missing."""
     if value in (None, ""):
@@ -98,6 +106,9 @@ def show_calendar_to_umc(entry: dict) -> dict:
         "runtime": episode.get("runtime"),
         "genres": ", ".join(show.get("genres") or []),
         "deep_link": _trakt_link("show", show.get("ids")),
+        "ids": _ids(show),
+        "season": season,
+        "number_int": number,
     }
 
 
@@ -115,6 +126,7 @@ def movie_calendar_to_umc(entry: dict) -> dict:
         "runtime": movie.get("runtime"),
         "genres": ", ".join(movie.get("genres") or []),
         "deep_link": _trakt_link("movie", movie.get("ids")),
+        "ids": _ids(movie),
     }
 
 
@@ -137,6 +149,9 @@ def next_to_watch_to_umc(entry: dict) -> dict:
         "rating": _round1(show.get("rating")),
         "genres": ", ".join(show.get("genres") or []),
         "deep_link": _trakt_link("show", show.get("ids")),
+        "ids": _ids(show),
+        "season": season,
+        "number_int": number,
     }
 
 
@@ -153,6 +168,7 @@ def recommendation_to_umc(obj: dict, kind: str) -> dict:
         "rating": _round1(obj.get("rating")),
         "genres": ", ".join(obj.get("genres") or []),
         "deep_link": _trakt_link(kind[:-1] if kind.endswith("s") else kind, obj.get("ids")),
+        "ids": _ids(obj),
     }
 
 

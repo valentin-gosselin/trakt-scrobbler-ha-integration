@@ -18,15 +18,81 @@ const DEFAULT_ENTITY = {
   stats: "sensor.stats",
 };
 
-const VIEW_TITLE = {
-  upcoming: "Upcoming",
-  next_to_watch: "Next to watch",
-  watchlist: "Watchlist",
-  recommendations: "Recommendations",
-  stats: "Stats",
+const STRINGS = {
+  en: {
+    upcoming: "Upcoming",
+    next_to_watch: "Next to watch",
+    watchlist: "Watchlist",
+    recommendations: "Recommendations",
+    stats: "Stats",
+    empty: "Nothing here.",
+    not_found: (e) => `Entity ${e} not found.`,
+    days_watched: "days watched",
+    movies: "Movies",
+    episodes: "Episodes",
+    shows: "Shows",
+    movie_plays: "Movie plays",
+    mark_watched: "Mark watched",
+    add_watchlist: "Add to watchlist",
+  },
+  fr: {
+    upcoming: "À venir",
+    next_to_watch: "À regarder ensuite",
+    watchlist: "Liste de suivi",
+    recommendations: "Recommandations",
+    stats: "Statistiques",
+    empty: "Rien ici.",
+    not_found: (e) => `Entité ${e} introuvable.`,
+    days_watched: "jours de visionnage",
+    movies: "Films",
+    episodes: "Épisodes",
+    shows: "Séries",
+    movie_plays: "Lectures films",
+    mark_watched: "Marquer comme vu",
+    add_watchlist: "Ajouter à la liste",
+  },
+  de: {
+    upcoming: "Demnächst",
+    next_to_watch: "Als Nächstes",
+    watchlist: "Merkliste",
+    recommendations: "Empfehlungen",
+    stats: "Statistiken",
+    empty: "Nichts hier.",
+    not_found: (e) => `Entität ${e} nicht gefunden.`,
+    days_watched: "Tage angesehen",
+    movies: "Filme",
+    episodes: "Folgen",
+    shows: "Serien",
+    movie_plays: "Film-Wiedergaben",
+    mark_watched: "Als gesehen markieren",
+    add_watchlist: "Zur Merkliste",
+  },
+  es: {
+    upcoming: "Próximamente",
+    next_to_watch: "Ver a continuación",
+    watchlist: "Lista de seguimiento",
+    recommendations: "Recomendaciones",
+    stats: "Estadísticas",
+    empty: "Nada aquí.",
+    not_found: (e) => `Entidad ${e} no encontrada.`,
+    days_watched: "días vistos",
+    movies: "Películas",
+    episodes: "Episodios",
+    shows: "Series",
+    movie_plays: "Reproducciones",
+    mark_watched: "Marcar como visto",
+    add_watchlist: "Añadir a la lista",
+  },
 };
 
 class TraktCard extends HTMLElement {
+  _t(key, ...args) {
+    const lang = (this._hass && this._hass.language) || "en";
+    const table = STRINGS[lang] || STRINGS.en;
+    const val = table[key] != null ? table[key] : STRINGS.en[key];
+    return typeof val === "function" ? val(...args) : val;
+  }
+
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
     this._config = config;
@@ -54,14 +120,16 @@ class TraktCard extends HTMLElement {
   }
 
   _title() {
-    return this._config.title || VIEW_TITLE[this._view] || "Trakt";
+    return this._config.title || this._t(this._view) || "Trakt";
   }
 
   _render() {
     if (!this._config || !this._hass) return;
     const st = this._stateObj();
     if (!st) {
-      this._card(`<div class="tk-empty">Entity ${this._entity} not found.</div>`);
+      this._card(
+        `<div class="tk-empty">${this._esc(this._t("not_found", this._entity))}</div>`
+      );
       return;
     }
     if (this._view === "stats") {
@@ -86,21 +154,26 @@ class TraktCard extends HTMLElement {
         genres: d.genres,
         number: d.number,
         link: d.deep_link,
+        ids: d.ids,
+        season: d.season,
+        number_int: d.number_int,
       }));
     }
     const max = this._config.max || 20;
     items = (items || []).filter((it) => it && it.title).slice(0, max);
 
     if (!items.length) {
-      this._card(`<div class="tk-empty">Nothing here.</div>`);
+      this._card(`<div class="tk-empty">${this._esc(this._t("empty"))}</div>`);
       return;
     }
 
-    const rows = items.map((it) => this._row(it)).join("");
+    const rows = items.map((it, i) => this._row(it, i)).join("");
+    this._items = items;
     this._card(`<div class="tk-list">${rows}</div>`);
+    this._bindActions();
   }
 
-  _row(it) {
+  _row(it, index) {
     const poster = it.poster
       ? `<img class="tk-poster" src="${it.poster}" loading="lazy" />`
       : `<div class="tk-poster tk-noposter"></div>`;
@@ -113,16 +186,83 @@ class TraktCard extends HTMLElement {
     if (meta.length) lines.push(meta.join(" · "));
     if (it.genres) lines.push(`<span class="tk-genres">${this._esc(it.genres)}</span>`);
 
-    const body = `
-      <div class="tk-info">
-        <div class="tk-title">${this._esc(it.title)}</div>
-        ${lines.map((l) => `<div class="tk-line">${l}</div>`).join("")}
+    const link = it.link
+      ? `<a class="tk-title tk-link" href="${it.link}" target="_blank" rel="noopener">${this._esc(it.title)}</a>`
+      : `<div class="tk-title">${this._esc(it.title)}</div>`;
+
+    // Quick actions: mark watched (episodes/movies) and add to watchlist.
+    const actions = `
+      <div class="tk-actions">
+        <ha-icon-button class="tk-act" data-act="watched" data-idx="${index}"
+          title="${this._esc(this._t("mark_watched"))}">
+          <ha-icon icon="mdi:check"></ha-icon>
+        </ha-icon-button>
+        <ha-icon-button class="tk-act" data-act="watchlist" data-idx="${index}"
+          title="${this._esc(this._t("add_watchlist"))}">
+          <ha-icon icon="mdi:bookmark-plus-outline"></ha-icon>
+        </ha-icon-button>
       </div>`;
 
-    const inner = `${poster}${body}`;
-    return it.link
-      ? `<a class="tk-item" href="${it.link}" target="_blank" rel="noopener">${inner}</a>`
-      : `<div class="tk-item">${inner}</div>`;
+    return `
+      <div class="tk-item">
+        ${poster}
+        <div class="tk-info">
+          ${link}
+          ${lines.map((l) => `<div class="tk-line">${l}</div>`).join("")}
+        </div>
+        ${actions}
+      </div>`;
+  }
+
+  _bindActions() {
+    this.querySelectorAll(".tk-act").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const idx = parseInt(btn.getAttribute("data-idx"), 10);
+        const act = btn.getAttribute("data-act");
+        const item = (this._items || [])[idx];
+        if (item) this._doAction(act, item);
+      });
+    });
+  }
+
+  _doAction(act, item) {
+    const ids = item.ids || {};
+    // Prefer the show ids for episodes; the sensor items carry show ids.
+    const idFields = {};
+    for (const k of ["trakt", "imdb", "tmdb", "tvdb"]) {
+      if (ids[k]) idFields[k] = String(ids[k]);
+    }
+    const isEpisode = !!item.number || this._view === "next_to_watch";
+    const mediaType = isEpisode ? "show" : "movie";
+
+    if (act === "watchlist") {
+      this._hass.callService("trakt_scrobbler", "add_to_watchlist", {
+        media_type: mediaType,
+        title: item.title,
+        ...idFields,
+      });
+    } else if (act === "watched") {
+      // mark_watched needs movie or episode; for shows in these lists we mark
+      // the specific episode when season/number are known, else the movie.
+      const data = { media_type: isEpisode ? "episode" : "movie", ...idFields };
+      if (isEpisode && item.season != null && item.number_int != null) {
+        data.season = item.season;
+        data.episode = item.number_int;
+      }
+      if (item.title) data.title = item.title;
+      this._hass.callService("trakt_scrobbler", "mark_watched", data);
+    }
+    this._toast(act);
+  }
+
+  _toast(act) {
+    const msg =
+      act === "watchlist" ? this._t("add_watchlist") : this._t("mark_watched");
+    const ev = new Event("hass-notification", { bubbles: true, composed: true });
+    ev.detail = { message: msg + " ✓" };
+    this.dispatchEvent(ev);
   }
 
   _renderStats(st) {
@@ -132,14 +272,14 @@ class TraktCard extends HTMLElement {
       days != null
         ? `<div class="tk-hero">
              <ha-icon icon="mdi:filmstrip"></ha-icon>
-             <span><b>${this._esc(String(days))}</b> days watched</span>
+             <span><b>${this._esc(String(days))}</b> ${this._esc(this._t("days_watched"))}</span>
            </div>`
         : "";
     const tiles = [
-      ["mdi:movie", a.movies_watched, "Movies"],
-      ["mdi:television-classic", a.episodes_watched, "Episodes"],
-      ["mdi:playlist-play", a.shows_watched, "Shows"],
-      ["mdi:play-circle-outline", a.movies_plays, "Movie plays"],
+      ["mdi:movie", a.movies_watched, this._t("movies")],
+      ["mdi:television-classic", a.episodes_watched, this._t("episodes")],
+      ["mdi:playlist-play", a.shows_watched, this._t("shows")],
+      ["mdi:play-circle-outline", a.movies_plays, this._t("movie_plays")],
     ];
     const body = tiles
       .map(
@@ -164,12 +304,18 @@ class TraktCard extends HTMLElement {
         .tk-list { display: flex; flex-direction: column; gap: 12px; }
         .tk-item {
           display: grid;
-          grid-template-columns: 62px 1fr;
+          grid-template-columns: 62px 1fr auto;
           gap: 12px;
           align-items: start;
-          text-decoration: none;
           color: var(--primary-text-color);
         }
+        .tk-link { text-decoration: none; color: var(--primary-text-color); }
+        .tk-link:hover { color: var(--primary-color); }
+        .tk-actions {
+          display: flex; flex-direction: column; gap: 2px;
+          opacity: 0.75;
+        }
+        .tk-act { --mdc-icon-button-size: 34px; --mdc-icon-size: 20px; }
         .tk-poster {
           width: 62px; height: 92px; object-fit: cover;
           border-radius: 6px; background: var(--secondary-background-color);
