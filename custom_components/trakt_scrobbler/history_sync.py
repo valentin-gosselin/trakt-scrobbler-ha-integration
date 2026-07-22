@@ -14,6 +14,7 @@ import logging
 
 from homeassistant.helpers.storage import Store
 
+from . import plex_trakt
 from .const import (
     DOMAIN,
     HISTORY_BATCH_SIZE,
@@ -71,20 +72,6 @@ def _fallback_key(entry: dict) -> str | None:
     show = (entry.get("show", {}) or {}).get("title") or ""
     ep = entry.get("episode", {}) or {}
     return f"ep:{show.lower()}:s{ep.get('season')}e{ep.get('number')}@{minute}"
-
-
-def _ids_from_guids(guids) -> dict:
-    """Turn a list of Plex guid objects into an imdb/tmdb/tvdb id dict."""
-    ids: dict = {}
-    for guid in guids or []:
-        gid = getattr(guid, "id", "") or ""
-        if gid.startswith("imdb://"):
-            ids["imdb"] = gid.replace("imdb://", "")
-        elif gid.startswith("tmdb://"):
-            ids["tmdb"] = gid.replace("tmdb://", "")
-        elif gid.startswith("tvdb://"):
-            ids["tvdb"] = gid.replace("tvdb://", "")
-    return ids
 
 
 class HistorySync:
@@ -444,7 +431,7 @@ class HistorySync:
         src = full or item
 
         if item_type == "movie":
-            ids = _ids_from_guids(getattr(src, "guids", None))
+            ids = plex_trakt.ids_from_plex_guids(getattr(src, "guids", None))
             title = getattr(src, "title", None) or getattr(item, "title", None)
             movie: dict = {"title": title}
             year = getattr(src, "year", None) or getattr(item, "year", None)
@@ -476,7 +463,7 @@ class HistorySync:
         # The episode's own guids are on the full item (already fetched in bulk).
         # Trakt matches an episode by its own ids too, so we attach them to the
         # episode object alongside the season/number and the show title.
-        episode_ids = _ids_from_guids(getattr(src, "guids", None))
+        episode_ids = plex_trakt.ids_from_plex_guids(getattr(src, "guids", None))
         show: dict = {"title": show_title}
         episode: dict = {"season": season, "number": number}
         if episode_ids:
@@ -556,21 +543,9 @@ class HistorySync:
         key = (media_type, title.lower())
         if key in cache:
             return cache[key]
-        from urllib.parse import quote
-
-        endpoint = f"/search/{media_type}?query={quote(title)}&limit=1"
+        endpoint = plex_trakt.search_endpoint(media_type, title)
         result = await self._entity._api_request(endpoint, method="GET")
-        ids = None
-        if isinstance(result, list) and result:
-            obj = result[0].get(media_type, {}) or {}
-            ids = obj.get("ids") or None
-            # Keep only the id kinds Trakt matches on for history.
-            if ids:
-                ids = {
-                    k: v
-                    for k, v in ids.items()
-                    if k in ("trakt", "imdb", "tmdb", "tvdb")
-                }
+        ids = plex_trakt.ids_from_search_result(result, media_type)
         cache[key] = ids
         return ids
 

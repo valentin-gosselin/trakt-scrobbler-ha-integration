@@ -14,6 +14,7 @@ from homeassistant.const import CONF_NAME, STATE_PLAYING, STATE_PAUSED
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from . import plex_trakt
 from .const import (
     CONF_PLEX_SERVER_URL,
     CONF_PLEX_LIBRARIES,
@@ -462,15 +463,13 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                             metadata['media_episode'] = item.episodeNumber
                             metadata['media_content_type'] = 'episode'
                             
-                        # Get external IDs if available
-                        if hasattr(item, 'guids'):
-                            for guid in item.guids:
-                                if 'imdb://' in guid.id:
-                                    metadata['imdb_id'] = guid.id.replace('imdb://', '')
-                                elif 'tmdb://' in guid.id:
-                                    metadata['tmdb_id'] = guid.id.replace('tmdb://', '')
-                                elif 'tvdb://' in guid.id:
-                                    metadata['tvdb_id'] = guid.id.replace('tvdb://', '')
+                        # Get external IDs if available (shared helper so the
+                        # scrobbler and the history backfill parse guids alike).
+                        guid_ids = plex_trakt.ids_from_plex_guids(
+                            getattr(item, "guids", None)
+                        )
+                        for kind, value in guid_ids.items():
+                            metadata[f"{kind}_id"] = value
                         
                         _LOGGER.debug("Plex metadata retrieved: %s", metadata)
                         return metadata
