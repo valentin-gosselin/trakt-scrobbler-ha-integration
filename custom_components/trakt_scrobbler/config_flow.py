@@ -40,6 +40,9 @@ from .const import (
     DEFAULT_UPDATE_WATCHING,
     DOMAIN,
     TRAKT_API_URL,
+    TRAKT_APPS_URL,
+    TRAKT_BUILTIN_CLIENT_ID,
+    TRAKT_BUILTIN_CLIENT_SECRET,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,13 +70,30 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step - get client credentials."""
+        """Handle the initial step.
+
+        If the integration ships built-in Trakt app credentials, the user
+        doesn't create their own app: we go straight to authorization. If not
+        (or in advanced setups), fall back to asking for client credentials.
+        """
         errors: dict[str, str] = {}
+
+        # Fast path: built-in app credentials, nothing for the user to enter.
+        if TRAKT_BUILTIN_CLIENT_ID and TRAKT_BUILTIN_CLIENT_SECRET:
+            self._data[CONF_CLIENT_ID] = TRAKT_BUILTIN_CLIENT_ID
+            self._data[CONF_CLIENT_SECRET] = TRAKT_BUILTIN_CLIENT_SECRET
+            try:
+                await self._get_device_code()
+                return await self.async_step_device()
+            except Exception as e:  # noqa: BLE001
+                _LOGGER.error("Error getting device code: %s", e)
+                # Fall through to manual entry so setup isn't fully blocked.
+                errors["base"] = "device_code_failed"
 
         if user_input is not None:
             self._data[CONF_CLIENT_ID] = user_input[CONF_CLIENT_ID]
             self._data[CONF_CLIENT_SECRET] = user_input[CONF_CLIENT_SECRET]
-            
+
             try:
                 # Get device code from Trakt
                 await self._get_device_code()
@@ -94,7 +114,7 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
             description_placeholders={
-                "trakt_app_url": "https://trakt.tv/oauth/applications",
+                "trakt_app_url": TRAKT_APPS_URL,
             },
         )
 

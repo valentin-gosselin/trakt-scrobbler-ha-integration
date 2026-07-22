@@ -29,10 +29,20 @@ OAUTH_AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"
 OAUTH_TOKEN_URL = "https://api.trakt.tv/oauth/token"
 OAUTH_REDIRECT_URI = "https://my.home-assistant.io/redirect/oauth"
 
-# API Configuration  
+# API Configuration
 TRAKT_API_URL = "https://api.trakt.tv"
 TRAKT_API_VERSION = "2"
 TRAKT_APP_ID = "Home Assistant Trakt Scrobbler"
+
+# Where users can create/manage their own Trakt API app (advanced mode).
+TRAKT_APPS_URL = "https://app.trakt.tv/settings/apps/api/new"
+
+# Built-in Trakt app credentials so users don't have to create their own app.
+# For the OAuth device flow these are shipped with the client by design; Trakt
+# treats them as public identifiers for a distributed application, not secrets.
+# TODO: fill these in with the integration's own Trakt application before release.
+TRAKT_BUILTIN_CLIENT_ID = "abDhseoq2ze4ROIPOS7RsVH-w1odJVz6FoVZnV3pXic"
+TRAKT_BUILTIN_CLIENT_SECRET = "BALzkBPJGTnTbNDrBUScURR2kYQvyeIb_9V_Psjanw4"
 
 # API Endpoints
 SCROBBLE_START = "/scrobble/start"
