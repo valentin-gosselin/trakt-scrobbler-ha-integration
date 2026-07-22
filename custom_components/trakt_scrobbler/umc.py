@@ -7,6 +7,32 @@ separate `sensor.trakt` integration.
 
 from __future__ import annotations
 
+import homeassistant.util.dt as dt_util
+
+
+def _to_local(iso: str | None) -> str:
+    """Convert a Trakt ISO 8601 UTC timestamp to a local, readable string.
+
+    Returns e.g. '2026-07-24 03:00' in the Home Assistant time zone. Falls back
+    to the original value if it can't be parsed.
+    """
+    if not iso:
+        return ""
+    parsed = dt_util.parse_datetime(iso)
+    if parsed is None:
+        return iso
+    return dt_util.as_local(parsed).strftime("%Y-%m-%d %H:%M")
+
+
+def _round1(value) -> str:
+    """Round a Trakt rating to one decimal for display; '' if missing."""
+    if value in (None, ""):
+        return ""
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return ""
+
 
 def _image_url(images: dict | None, kind: str) -> str:
     """Return the first https image url of a kind from a Trakt images object."""
@@ -58,10 +84,10 @@ def show_calendar_to_umc(entry: dict) -> dict:
         if season is not None and number is not None
         else "",
         "airdate": entry.get("first_aired"),
-        "release": entry.get("first_aired"),
+        "release": _to_local(entry.get("first_aired")),
         "poster": _image_url(show.get("images"), "poster"),
         "fanart": _image_url(show.get("images"), "fanart"),
-        "rating": show.get("rating"),
+        "rating": _round1(show.get("rating")),
         "runtime": episode.get("runtime"),
         "genres": ", ".join(show.get("genres") or []),
         "deep_link": _trakt_link("show", show.get("ids")),
@@ -75,10 +101,10 @@ def movie_calendar_to_umc(entry: dict) -> dict:
         "title": movie.get("title"),
         "episode": "",
         "airdate": entry.get("released"),
-        "release": entry.get("released"),
+        "release": _to_local(entry.get("released")),
         "poster": _image_url(movie.get("images"), "poster"),
         "fanart": _image_url(movie.get("images"), "fanart"),
-        "rating": movie.get("rating"),
+        "rating": _round1(movie.get("rating")),
         "runtime": movie.get("runtime"),
         "genres": ", ".join(movie.get("genres") or []),
         "deep_link": _trakt_link("movie", movie.get("ids")),
@@ -98,10 +124,10 @@ def next_to_watch_to_umc(entry: dict) -> dict:
         if season is not None and number is not None
         else "",
         "airdate": ep.get("first_aired"),
-        "release": ep.get("first_aired"),
+        "release": _to_local(ep.get("first_aired")),
         "poster": _image_url(show.get("images"), "poster"),
         "fanart": _image_url(show.get("images"), "fanart"),
-        "rating": show.get("rating"),
+        "rating": _round1(show.get("rating")),
         "genres": ", ".join(show.get("genres") or []),
         "deep_link": _trakt_link("show", show.get("ids")),
     }

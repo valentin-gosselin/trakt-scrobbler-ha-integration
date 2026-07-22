@@ -143,7 +143,15 @@ class TraktDataCoordinator(DataUpdateCoordinator):
             movies = await self._get(
                 f"/calendars/my/movies/{start}/{days}?extended=full"
             )
-            data["upcoming_shows"] = shows if isinstance(shows, list) else []
+            shows = shows if isinstance(shows, list) else []
+            # Drop specials (season 0): they're making-of/extra content, not
+            # regular episodes the user is tracking.
+            shows = [
+                s
+                for s in shows
+                if (s.get("episode") or {}).get("season") not in (0, None)
+            ]
+            data["upcoming_shows"] = shows
             data["upcoming_movies"] = movies if isinstance(movies, list) else []
 
         if GROUP_NEXT in self._groups:
