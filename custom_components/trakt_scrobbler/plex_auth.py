@@ -71,7 +71,23 @@ def discover_servers(token: str) -> list[dict]:
     local/direct connection URI when available, otherwise the first reachable
     connection reported by plex.tv.
     """
+    import socket
+    from urllib.parse import urlparse
+
     from plexapi.myplex import MyPlexAccount
+
+    def _responds(uri: str, timeout: float = 2.0) -> bool:
+        """Quick TCP check that something is actually listening at the uri."""
+        parsed = urlparse(uri)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if not host:
+            return False
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except OSError:
+            return False
 
     account = MyPlexAccount(token=token)
     servers: list[dict] = []
@@ -80,10 +96,26 @@ def discover_servers(token: str) -> list[dict]:
         if "server" not in (resource.provides or ""):
             continue
         connections = getattr(resource, "connections", []) or []
-        # Prefer a local connection, fall back to any.
-        local = next((c for c in connections if getattr(c, "local", False)), None)
-        chosen = local or (connections[0] if connections else None)
-        if chosen is None:
+        if not connections:
             continue
-        servers.append({"name": resource.name, "url": chosen.uri})
+
+        # Order candidates: local connections first, then the rest.
+        ordered = sorted(
+            connections, key=lambda c: not getattr(c, "local", False)
+        )
+        # Pick the first connection that actually responds; if none do, fall
+        # back to the first candidate but mark the server as unreachable so the
+        # user isn't silently pointed at a dead server.
+        reachable_uri = next((c.uri for c in ordered if _responds(c.uri)), None)
+        chosen_uri = reachable_uri or ordered[0].uri
+        servers.append(
+            {
+                "name": resource.name,
+                "url": chosen_uri,
+                "reachable": reachable_uri is not None,
+            }
+        )
+
+    # Show reachable servers first so the default selection is a working one.
+    servers.sort(key=lambda s: not s["reachable"])
     return servers

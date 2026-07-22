@@ -266,9 +266,18 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Authenticated but no server found: finish without a server URL.
             return self._create_entry()
 
-        options = {s["url"]: f"{s['name']} ({s['url']})" for s in servers}
+        def _label(server: dict) -> str:
+            status = "" if server.get("reachable", True) else " - unreachable"
+            return f"{server['name']} ({server['url']}){status}"
+
+        options = {s["url"]: _label(s) for s in servers}
+        # Default to the first server, which is the first reachable one.
         schema = vol.Schema(
-            {vol.Required(CONF_PLEX_SERVER_URL): vol.In(options)}
+            {
+                vol.Required(
+                    CONF_PLEX_SERVER_URL, default=servers[0]["url"]
+                ): vol.In(options)
+            }
         )
         return self.async_show_form(step_id="plex_server", data_schema=schema)
 
