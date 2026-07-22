@@ -18,6 +18,7 @@ from . import DATA_COORDINATOR
 from .const import (
     DOMAIN,
     GROUP_NEXT,
+    GROUP_RECO,
     GROUP_STATS,
     GROUP_UPCOMING,
     GROUP_WATCHLIST,
@@ -56,6 +57,10 @@ async def async_setup_entry(
 
     if GROUP_STATS in groups:
         entities.append(TraktStatsSensor(coordinator, entry))
+
+    if GROUP_RECO in groups:
+        entities.append(TraktRecommendationsSensor(coordinator, entry, "shows"))
+        entities.append(TraktRecommendationsSensor(coordinator, entry, "movies"))
 
     async_add_entities(entities)
 
@@ -234,3 +239,40 @@ class TraktStatsSensor(TraktBaseSensor):
             "total_minutes": total_minutes,
             "total_days": round(total_minutes / 1440, 1) if total_minutes else 0,
         }
+
+
+class TraktRecommendationsSensor(TraktBaseSensor):
+    """Personalized Trakt recommendations for shows or movies."""
+
+    _attr_icon = "mdi:star-shooting"
+
+    def __init__(self, coordinator, entry: ConfigEntry, kind: str) -> None:
+        """kind is 'shows' or 'movies'."""
+        super().__init__(coordinator, entry, f"reco_{kind}")
+        self._kind = kind
+        self._attr_name = (
+            "Recommended shows" if kind == "shows" else "Recommended movies"
+        )
+
+    @property
+    def _items(self) -> list:
+        return (self.coordinator.data or {}).get(f"reco_{self._kind}") or []
+
+    @property
+    def native_value(self):
+        """State is the number of recommendations."""
+        return len(self._items)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        items = []
+        for obj in self._items:
+            items.append(
+                {
+                    "title": obj.get("title"),
+                    "year": obj.get("year"),
+                    "ids": obj.get("ids"),
+                    "overview": obj.get("overview"),
+                }
+            )
+        return {"count": len(items), "items": items}

@@ -27,6 +27,7 @@ from .const import (
     DEFAULT_UPCOMING_DAYS,
     DOMAIN,
     GROUP_NEXT,
+    GROUP_RECO,
     GROUP_STATS,
     GROUP_UPCOMING,
     GROUP_WATCHLIST,
@@ -130,6 +131,16 @@ class TraktDataCoordinator(DataUpdateCoordinator):
         if GROUP_STATS in self._groups:
             stats = await self._get("/users/me/stats")
             data["stats"] = stats if isinstance(stats, dict) else {}
+
+        if GROUP_RECO in self._groups:
+            rec_shows = await self._get(
+                "/recommendations/shows?limit=20&extended=full"
+            )
+            rec_movies = await self._get(
+                "/recommendations/movies?limit=20&extended=full"
+            )
+            data["reco_shows"] = rec_shows if isinstance(rec_shows, list) else []
+            data["reco_movies"] = rec_movies if isinstance(rec_movies, list) else []
 
         return data
 
