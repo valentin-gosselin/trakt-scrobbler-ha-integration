@@ -17,12 +17,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+import homeassistant.util.dt as dt_util
 
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_ID,
+    CONF_UPCOMING_DAYS,
     DEFAULT_SCAN_INTERVAL_HOURS,
+    DEFAULT_UPCOMING_DAYS,
     DOMAIN,
+    GROUP_UPCOMING,
     TRAKT_API_URL,
     TRAKT_API_VERSION,
 )
@@ -98,6 +102,18 @@ class TraktDataCoordinator(DataUpdateCoordinator):
         implemented so far), which is a valid, no-entity state.
         """
         data: dict = {}
-        # Group fetches are added incrementally by later stories, e.g.:
-        #   if GROUP_UPCOMING in self._groups: data["upcoming_shows"] = ...
+
+        if GROUP_UPCOMING in self._groups:
+            days = self._config.get(CONF_UPCOMING_DAYS, DEFAULT_UPCOMING_DAYS)
+            # Trakt calendars are date-anchored; "today" in UTC is fine here.
+            start = dt_util.utcnow().strftime("%Y-%m-%d")
+            shows = await self._get(
+                f"/calendars/my/shows/{start}/{days}?extended=full"
+            )
+            movies = await self._get(
+                f"/calendars/my/movies/{start}/{days}?extended=full"
+            )
+            data["upcoming_shows"] = shows if isinstance(shows, list) else []
+            data["upcoming_movies"] = movies if isinstance(movies, list) else []
+
         return data
