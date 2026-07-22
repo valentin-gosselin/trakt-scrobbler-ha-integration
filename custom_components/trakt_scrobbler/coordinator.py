@@ -27,7 +27,9 @@ from .const import (
     DEFAULT_UPCOMING_DAYS,
     DOMAIN,
     GROUP_NEXT,
+    GROUP_STATS,
     GROUP_UPCOMING,
+    GROUP_WATCHLIST,
     NEXT_TO_WATCH_MAX_SHOWS,
     TRAKT_API_URL,
     TRAKT_API_VERSION,
@@ -120,6 +122,14 @@ class TraktDataCoordinator(DataUpdateCoordinator):
 
         if GROUP_NEXT in self._groups:
             data["next_to_watch"] = await self._fetch_next_to_watch()
+
+        if GROUP_WATCHLIST in self._groups:
+            wl = await self._get("/sync/watchlist?extended=full")
+            data["watchlist"] = wl if isinstance(wl, list) else []
+
+        if GROUP_STATS in self._groups:
+            stats = await self._get("/users/me/stats")
+            data["stats"] = stats if isinstance(stats, dict) else {}
 
         return data
 

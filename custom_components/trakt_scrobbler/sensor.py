@@ -15,7 +15,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DATA_COORDINATOR
-from .const import DOMAIN, GROUP_NEXT, GROUP_UPCOMING
+from .const import (
+    DOMAIN,
+    GROUP_NEXT,
+    GROUP_STATS,
+    GROUP_UPCOMING,
+    GROUP_WATCHLIST,
+)
 from .options import enabled_groups
 from .umc import (
     movie_calendar_to_umc,
@@ -44,6 +50,12 @@ async def async_setup_entry(
 
     if GROUP_NEXT in groups:
         entities.append(TraktNextToWatchSensor(coordinator, entry))
+
+    if GROUP_WATCHLIST in groups:
+        entities.append(TraktWatchlistSensor(coordinator, entry))
+
+    if GROUP_STATS in groups:
+        entities.append(TraktStatsSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -143,3 +155,82 @@ class TraktNextToWatchSensor(TraktBaseSensor):
             )
             umc.append(next_to_watch_to_umc(entry))
         return {"count": len(items), "shows": shows, "data": umc}
+
+
+class TraktWatchlistSensor(TraktBaseSensor):
+    """The user's Trakt watchlist (movies and shows)."""
+
+    _attr_icon = "mdi:bookmark-multiple"
+    _attr_name = "Watchlist"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the watchlist sensor."""
+        super().__init__(coordinator, entry, "watchlist")
+
+    @property
+    def _items(self) -> list:
+        return (self.coordinator.data or {}).get("watchlist") or []
+
+    @property
+    def native_value(self):
+        """State is the number of items on the watchlist."""
+        return len(self._items)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        items = []
+        for entry in self._items:
+            media_type = entry.get("type")
+            obj = entry.get(media_type) if media_type else None
+            obj = obj or {}
+            items.append(
+                {
+                    "type": media_type,
+                    "title": obj.get("title"),
+                    "year": obj.get("year"),
+                    "ids": obj.get("ids"),
+                }
+            )
+        return {"count": len(items), "items": items}
+
+
+class TraktStatsSensor(TraktBaseSensor):
+    """Aggregate Trakt watch statistics."""
+
+    _attr_icon = "mdi:chart-box"
+    _attr_name = "Stats"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the stats sensor."""
+        super().__init__(coordinator, entry, "stats")
+
+    @property
+    def _stats(self) -> dict:
+        return (self.coordinator.data or {}).get("stats") or {}
+
+    @property
+    def native_value(self):
+        """State is total movies + episodes watched."""
+        stats = self._stats
+        movies = (stats.get("movies") or {}).get("watched", 0)
+        episodes = (stats.get("episodes") or {}).get("watched", 0)
+        return (movies or 0) + (episodes or 0)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        stats = self._stats
+        movies = stats.get("movies") or {}
+        episodes = stats.get("episodes") or {}
+        shows = stats.get("shows") or {}
+        total_minutes = (movies.get("minutes", 0) or 0) + (
+            episodes.get("minutes", 0) or 0
+        )
+        return {
+            "movies_watched": movies.get("watched"),
+            "movies_plays": movies.get("plays"),
+            "episodes_watched": episodes.get("watched"),
+            "episodes_plays": episodes.get("plays"),
+            "shows_watched": shows.get("watched"),
+            "total_minutes": total_minutes,
+            "total_days": round(total_minutes / 1440, 1) if total_minutes else 0,
+        }
