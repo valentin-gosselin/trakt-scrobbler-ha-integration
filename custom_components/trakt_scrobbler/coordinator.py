@@ -197,6 +197,17 @@ class TraktDataCoordinator(DataUpdateCoordinator):
             next_ep = progress.get("next_episode")
             if not next_ep:
                 continue  # show is up to date on aired episodes
+            # watched/shows never returns images, so fetch them for the few
+            # shows we actually keep (those with a ready next episode).
+            full_show = await self._get(
+                f"/shows/{trakt_id}?extended=full,images"
+            )
+            if isinstance(full_show, dict) and full_show.get("images"):
+                show = {**show, "images": full_show["images"]}
+                if full_show.get("genres"):
+                    show["genres"] = full_show["genres"]
+                if full_show.get("rating"):
+                    show["rating"] = full_show["rating"]
             results.append(
                 {
                     "show": show,

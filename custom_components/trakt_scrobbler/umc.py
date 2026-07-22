@@ -34,6 +34,17 @@ def umc_header(title_default: str = "$title") -> dict:
     }
 
 
+def umc_data(items: list, empty_message: str = "Nothing here") -> list:
+    """Wrap UMC items with the header, or a placeholder when the list is empty.
+
+    The Upcoming Media Card shows a loading bar when it only gets the header
+    with no items, so we add a single placeholder item for empty states.
+    """
+    if not items:
+        return [umc_header(), {"title": empty_message, "airdate": ""}]
+    return [umc_header(), *items]
+
+
 def show_calendar_to_umc(entry: dict) -> dict:
     """Map one Trakt 'my shows' calendar entry to a UMC item."""
     show = entry.get("show") or {}

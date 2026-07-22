@@ -29,7 +29,7 @@ from .umc import (
     movie_calendar_to_umc,
     next_to_watch_to_umc,
     show_calendar_to_umc,
-    umc_header,
+    umc_data,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,16 +113,19 @@ class TraktUpcomingSensor(TraktBaseSensor):
         mapper = (
             show_calendar_to_umc if self._kind == "shows" else movie_calendar_to_umc
         )
-        umc = [umc_header()]
-        for entry in items:
-            umc.append(mapper(entry))
+        mapped = [mapper(entry) for entry in items]
+        empty = (
+            "No upcoming shows"
+            if self._kind == "shows"
+            else "No upcoming movies"
+        )
+        umc = umc_data(mapped, empty)
 
-        # Native, easy-to-read attributes alongside the UMC `data` array.
-        next_item = umc[1] if len(umc) > 1 else {}
+        first = mapped[0] if mapped else {}
         return {
             "count": len(items),
-            "next_title": next_item.get("title"),
-            "next_air_date": next_item.get("airdate"),
+            "next_title": first.get("title"),
+            "next_air_date": first.get("airdate"),
             "data": umc,
         }
 
@@ -150,7 +153,7 @@ class TraktNextToWatchSensor(TraktBaseSensor):
     def extra_state_attributes(self) -> dict:
         items = self._items
         shows = []
-        umc = [umc_header()]
+        mapped = []
         for entry in items:
             show = entry.get("show") or {}
             ep = entry.get("next_episode") or {}
@@ -164,8 +167,12 @@ class TraktNextToWatchSensor(TraktBaseSensor):
                     "watched_episodes": entry.get("completed"),
                 }
             )
-            umc.append(next_to_watch_to_umc(entry))
-        return {"count": len(items), "shows": shows, "data": umc}
+            mapped.append(next_to_watch_to_umc(entry))
+        return {
+            "count": len(items),
+            "shows": shows,
+            "data": umc_data(mapped, "Nothing to watch"),
+        }
 
 
 class TraktWatchlistSensor(TraktBaseSensor):
