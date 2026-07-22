@@ -422,8 +422,17 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
     async def get_plex_metadata(self, content_id: str) -> dict | None:
         """Get metadata from Plex server using content_id."""
         if not self._plex_server:
-            return None
-            
+            # The initial connection can fail if DNS for the .plex.direct host
+            # is not ready yet at startup (Errno -3 "Try again"). There is no
+            # background retry, so reconnect lazily the first time we actually
+            # need Plex instead of staying dead for the whole session.
+            if self._plex_server_url and self._plex_token:
+                _LOGGER.debug("Plex server not connected yet, retrying connection")
+                await self._async_init_plex()
+            if not self._plex_server:
+                return None
+
+
         try:
             # Extract rating key from content_id
             # Format: server://xxx/com.plexapp.plugins.library/library/metadata/84303
