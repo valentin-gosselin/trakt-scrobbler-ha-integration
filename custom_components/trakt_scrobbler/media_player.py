@@ -996,6 +996,15 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             # We only process the first valid player
             break
 
+    def _effective_threshold(self, duration) -> float:
+        """Percent watched required to mark an item as watched.
+
+        This is simply the user's "Scrobble at % watched" option, so the slider
+        actually controls when an item is marked watched. Falls back to 80% only
+        if the option is somehow unset.
+        """
+        return self._scrobble_percentage or 80
+
     async def _process_media(self, player, media_type, media_obj):
         """Process media information and handle scrobbling."""
         try:
@@ -1005,13 +1014,12 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             self._duration = duration
             
             # Enhanced debug logging for progress tracking
-            effective_threshold = 50 if duration < 300 else 80
+            effective_threshold = self._effective_threshold(duration)
             _LOGGER.debug("Media progress tracking:")
             _LOGGER.debug("  Position: %s seconds", position)
-            _LOGGER.debug("  Duration: %s seconds", duration) 
+            _LOGGER.debug("  Duration: %s seconds", duration)
             _LOGGER.debug("  Progress: %s%%", round(progress, 2))
-            _LOGGER.debug("  User threshold: %s%% (for watching updates)", self._scrobble_percentage)
-            _LOGGER.debug("  Final scrobble threshold: %s%% (to mark as watched)", effective_threshold)
+            _LOGGER.debug("  Scrobble threshold: %s%% (to mark as watched)", effective_threshold)
             _LOGGER.debug("  Will final scrobble: %s", progress >= effective_threshold)
             _LOGGER.debug("  Player state: %s", player.state)
             _LOGGER.debug("  Last scrobbled: %s", self._last_scrobbled == media_obj)
@@ -1056,24 +1064,17 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                         _LOGGER.warning("Failed to start watching, skipping further processing")
                         return
                 
-                # Check if we should scrobble (full episode completion)
-                # For episodes shorter than 5 minutes, use a lower threshold (50%)
-                # For normal episodes/movies, require at least 80% to mark as "watched"
-                effective_threshold = 50 if duration < 300 else 80
-                
+                # Mark as watched once the user's configured percentage is
+                # reached (this is the "Scrobble at % watched" option).
+                effective_threshold = self._effective_threshold(duration)
+
                 if progress >= effective_threshold and self._last_scrobbled != media_obj:
-                    _LOGGER.info("Scrobble threshold reached: %s%% >= %s%%", 
+                    _LOGGER.info("Scrobble threshold reached: %s%% >= %s%%",
                                round(progress, 2), effective_threshold)
                     await self.scrobble(media_obj, progress)
-                elif progress >= self._scrobble_percentage and self._last_scrobbled != media_obj:
-                    # User's threshold reached but not enough for "watched" - just update watching
-                    _LOGGER.debug("User threshold reached (%s%%) but not enough for final scrobble", 
-                               round(progress, 2))
-                    # Update progress on Trakt to show current position
-                    await self.update_progress(media_obj, progress)
                 else:
-                    _LOGGER.debug("Not scrobbling: progress=%s%%, threshold=%s%%, already_scrobbled=%s", 
-                                round(progress, 2), self._scrobble_percentage, self._last_scrobbled == media_obj)
+                    _LOGGER.debug("Not scrobbling: progress=%s%%, threshold=%s%%, already_scrobbled=%s",
+                                round(progress, 2), effective_threshold, self._last_scrobbled == media_obj)
                     
             elif player.state == STATE_PAUSED and self._is_watching:
                 _LOGGER.debug("Player is PAUSED - sending pause to Trakt")
