@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Configuración de Trakt Scrobbler",
-        "description": "Para configurar Trakt Scrobbler, necesitas crear una app en Trakt:\n\n1. Ve a {trakt_app_url}\n2. Crea una nueva app\n3. Establece la URI de redirección: `urn:ietf:wg:oauth:2.0:oob`\n4. Copia tu Client ID y Client Secret",
+        "description": "Para configurar Trakt Scrobbler, debes crear una aplicación en Trakt:\n\n1. Ve a {trakt_app_url}\n2. Crea una nueva aplicación\n3. Establece la URI de redirección en: `urn:ietf:wg:oauth:2.0:oob`\n4. Copia tu Client ID y tu Client Secret",
         "data": {
           "client_id": "Client ID",
           "client_secret": "Client Secret"
@@ -11,27 +11,61 @@
       },
       "device": {
         "title": "Activar dispositivo",
-        "description": "Para completar la configuración:\n\n1. Visita: **{verification_url}**\n2. Introduce el código: **{user_code}**\n3. Haz clic en Enviar después de autorizar"
+        "description": "Para completar la configuración:\n\n1. Visita: **{verification_url}**\n2. Introduce el código: **{user_code}**\n3. Haz clic en Enviar abajo tras autorizar"
       },
       "options": {
-        "title": "Configurar opciones del Scrobbler",
+        "title": "Configurar opciones del scrobbler",
         "data": {
           "name": "Nombre de la integración",
           "media_players": "Reproductores multimedia a monitorizar",
           "scrobble_percentage": "Hacer scrobble al % visto",
-          "update_watching": "Actualizar estado 'Viendo ahora'",
-          "check_entity": "Solo hacer scrobble cuando estas entidades lo permitan"
+          "update_watching": "Actualizar el estado «Viendo ahora»",
+          "check_entity": "Hacer scrobble solo cuando estas entidades lo permitan"
+        }
+      },
+      "plex_ask": {
+        "title": "Conectar Plex (opcional)",
+        "description": "Plex es opcional. Conéctalo para obtener metadatos más completos y para poder importar tu historial de reproducción de Plex a Trakt.",
+        "data": {
+          "connect_plex": "Conectar mi cuenta de Plex"
+        }
+      },
+      "plex_pin": {
+        "title": "Autorizar Plex",
+        "description": "1. Abre este enlace en tu navegador: **{auth_url}**\n2. Inicia sesión y autoriza la aplicación\n3. Haz clic en Enviar abajo"
+      },
+      "plex_server": {
+        "title": "Seleccionar servidor Plex",
+        "data": {
+          "plex_server_url": "Servidor Plex"
+        }
+      },
+      "plex_libraries": {
+        "title": "Seleccionar bibliotecas de Plex",
+        "description": "Elige de qué bibliotecas de Plex hacer scrobble e importar. Desmarca las que no quieras en Trakt, como las bibliotecas de vídeos personales o familiares.",
+        "data": {
+          "plex_libraries": "Bibliotecas a incluir"
+        }
+      },
+      "import_ask": {
+        "title": "¿Importar el historial de Plex ahora?",
+        "description": "Opcionalmente puedes rellenar tu historial de Trakt desde Plex justo después de la configuración. Deja la fecha de inicio vacía para importar todo el historial disponible, o indícala (por ejemplo tu fecha de importación de TV Time) para importar solo a partir de entonces.",
+        "data": {
+          "import_on_setup": "Importar mi historial de reproducción de Plex a Trakt ahora",
+          "import_start_date": "Fecha de inicio (opcional)"
         }
       }
     },
     "error": {
-      "device_code_failed": "Error al obtener el código del dispositivo de Trakt",
-      "token_poll_failed": "Error al obtener el token de acceso. Por favor, inténtalo de nuevo.",
-      "unknown": "Ha ocurrido un error desconocido"
+      "device_code_failed": "No se pudo obtener el código de dispositivo de Trakt",
+      "token_poll_failed": "No se pudo obtener el token de acceso. Inténtalo de nuevo.",
+      "plex_not_authorized": "El PIN de Plex aún no ha sido autorizado. Autorízalo en tu navegador y luego haz clic en Enviar.",
+      "unknown": "Se produjo un error desconocido"
     },
     "abort": {
       "no_device_info": "No hay información del dispositivo disponible",
-      "token_poll_failed": "No se pudo obtener el token de acceso de Trakt"
+      "token_poll_failed": "No se pudo obtener el token de acceso de Trakt",
+      "plex_pin_failed": "No se pudo crear un PIN de Plex. Inténtalo de nuevo."
     }
   },
   "options": {
@@ -41,8 +75,12 @@
         "data": {
           "media_players": "Reproductores multimedia a monitorizar",
           "scrobble_percentage": "Hacer scrobble al % visto",
-          "update_watching": "Actualizar estado 'Viendo ahora'",
-          "check_entity": "Solo hacer scrobble cuando estas entidades lo permitan"
+          "update_watching": "Actualizar el estado «Viendo ahora»",
+          "check_entity": "Hacer scrobble solo cuando estas entidades lo permitan",
+          "plex_server_url": "URL del servidor Plex (opcional)",
+          "plex_token": "Token de Plex (opcional)",
+          "auto_sync_history": "Sincronizar automáticamente el historial de Plex con Trakt",
+          "auto_sync_interval_hours": "Intervalo de sincronización automática (horas)"
         }
       }
     }
