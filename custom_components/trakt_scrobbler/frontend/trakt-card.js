@@ -109,8 +109,19 @@ class TraktCard extends HTMLElement {
     return this._view === "stats" ? 3 : 6;
   }
 
-  static getStubConfig() {
-    return { view: "upcoming", entity: "sensor.upcoming_shows" };
+  static getStubConfig(hass) {
+    // Pick a real upcoming-shows sensor if one exists (entity ids can differ
+    // when the user already had a sensor of the same name), else a sane default.
+    let entity = "sensor.upcoming_shows";
+    if (hass && hass.states) {
+      const match = Object.keys(hass.states).find(
+        (id) =>
+          id.startsWith("sensor.") &&
+          id.includes("upcoming_shows")
+      );
+      if (match) entity = match;
+    }
+    return { view: "upcoming", entity };
   }
 
   _stateObj() {
@@ -426,4 +437,6 @@ window.customCards.push({
   description:
     "Upcoming, next-to-watch, watchlist, stats and recommendations from Trakt.",
   preview: true,
+  documentationURL:
+    "https://github.com/valentin-gosselin/trakt-scrobbler-ha-integration#trakt-card",
 });
