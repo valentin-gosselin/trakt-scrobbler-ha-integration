@@ -51,6 +51,11 @@ GROUP_RECO = "recommendations"
 # Default polling interval for the data coordinator (hours).
 DEFAULT_SCAN_INTERVAL_HOURS = 3
 
+# Frontend card served and auto-registered by the integration.
+CARD_URL_BASE = "/trakt_scrobbler"
+CARD_FILENAME = "trakt-card.js"
+CARD_VERSION = "1.3.0"
+
 # Next-to-watch requires one progress request per show; cap how many of the
 # most recently watched shows we check per refresh to respect Trakt rate limits.
 NEXT_TO_WATCH_MAX_SHOWS = 40

@@ -279,25 +279,23 @@ class TraktRecommendationsSensor(TraktBaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict:
+        mapped = [recommendation_to_umc(o, self._kind) for o in self._items]
         items = []
-        mapped = []
-        for obj in self._items:
+        for obj, m in zip(self._items, mapped):
             items.append(
                 {
                     "title": obj.get("title"),
                     "year": obj.get("year"),
                     "ids": obj.get("ids"),
                     "overview": obj.get("overview"),
+                    "poster": m.get("poster"),
+                    "fanart": m.get("fanart"),
+                    "rating": m.get("rating"),
+                    "link": m.get("deep_link"),
                 }
             )
-        empty = (
-            "No recommendations"
-            if self._kind == "shows"
-            else "No recommendations"
-        )
-        mapped = [recommendation_to_umc(o, self._kind) for o in self._items]
         return {
             "count": len(items),
             "items": items,
-            "data": umc_data(mapped, empty),
+            "data": umc_data(mapped, "No recommendations"),
         }

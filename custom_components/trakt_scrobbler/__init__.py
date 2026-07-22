@@ -22,6 +22,7 @@ from .const import (
     SERVICE_IMPORT_PLEX_HISTORY,
 )
 from .coordinator import TraktDataCoordinator
+from .frontend import async_register_card
 from .history_sync import HistorySync
 from .options import enabled_groups
 from .services_trakt import async_register_trakt_services
@@ -42,6 +43,12 @@ IMPORT_HISTORY_SCHEMA = vol.Schema(
         vol.Optional(ATTR_DRY_RUN, default=True): cv.boolean,
     }
 )
+
+
+async def async_setup(hass: core.HomeAssistant, config: dict) -> bool:
+    """Set up integration-wide resources once (the Lovelace card)."""
+    await async_register_card(hass)
+    return True
 
 
 async def async_setup_entry(
