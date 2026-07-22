@@ -15,10 +15,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DATA_COORDINATOR
-from .const import DOMAIN, GROUP_UPCOMING
+from .const import DOMAIN, GROUP_NEXT, GROUP_UPCOMING
 from .options import enabled_groups
 from .umc import (
     movie_calendar_to_umc,
+    next_to_watch_to_umc,
     show_calendar_to_umc,
     umc_header,
 )
@@ -40,6 +41,9 @@ async def async_setup_entry(
     if GROUP_UPCOMING in groups:
         entities.append(TraktUpcomingSensor(coordinator, entry, "shows"))
         entities.append(TraktUpcomingSensor(coordinator, entry, "movies"))
+
+    if GROUP_NEXT in groups:
+        entities.append(TraktNextToWatchSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -98,3 +102,44 @@ class TraktUpcomingSensor(TraktBaseSensor):
             "next_air_date": next_item.get("airdate"),
             "data": umc,
         }
+
+
+class TraktNextToWatchSensor(TraktBaseSensor):
+    """Next unwatched episode across in-progress shows."""
+
+    _attr_icon = "mdi:play-box-multiple"
+    _attr_name = "Next to watch"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the next-to-watch sensor."""
+        super().__init__(coordinator, entry, "next_to_watch")
+
+    @property
+    def _items(self) -> list:
+        return (self.coordinator.data or {}).get("next_to_watch") or []
+
+    @property
+    def native_value(self):
+        """State is the number of shows with a ready next episode."""
+        return len(self._items)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        items = self._items
+        shows = []
+        umc = [umc_header()]
+        for entry in items:
+            show = entry.get("show") or {}
+            ep = entry.get("next_episode") or {}
+            shows.append(
+                {
+                    "show": show.get("title"),
+                    "season": ep.get("season"),
+                    "number": ep.get("number"),
+                    "episode_title": ep.get("title"),
+                    "aired_episodes": entry.get("aired"),
+                    "watched_episodes": entry.get("completed"),
+                }
+            )
+            umc.append(next_to_watch_to_umc(entry))
+        return {"count": len(items), "shows": shows, "data": umc}

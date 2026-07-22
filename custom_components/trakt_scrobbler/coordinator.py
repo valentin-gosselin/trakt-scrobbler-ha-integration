@@ -26,7 +26,9 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_HOURS,
     DEFAULT_UPCOMING_DAYS,
     DOMAIN,
+    GROUP_NEXT,
     GROUP_UPCOMING,
+    NEXT_TO_WATCH_MAX_SHOWS,
     TRAKT_API_URL,
     TRAKT_API_VERSION,
 )
@@ -116,4 +118,46 @@ class TraktDataCoordinator(DataUpdateCoordinator):
             data["upcoming_shows"] = shows if isinstance(shows, list) else []
             data["upcoming_movies"] = movies if isinstance(movies, list) else []
 
+        if GROUP_NEXT in self._groups:
+            data["next_to_watch"] = await self._fetch_next_to_watch()
+
         return data
+
+    async def _fetch_next_to_watch(self) -> list:
+        """Return the next unwatched episode for in-progress shows.
+
+        Progress requires one request per show, so we look only at the most
+        recently watched shows (capped) to stay well within Trakt's rate limit,
+        and keep only shows that actually have an aired next episode.
+        """
+        watched = await self._get("/sync/watched/shows?extended=noseasons")
+        if not isinstance(watched, list):
+            return []
+        watched.sort(key=lambda x: x.get("last_watched_at") or "", reverse=True)
+
+        results: list = []
+        for entry in watched[:NEXT_TO_WATCH_MAX_SHOWS]:
+            show = entry.get("show") or {}
+            ids = show.get("ids") or {}
+            trakt_id = ids.get("trakt")
+            if not trakt_id:
+                continue
+            progress = await self._get(
+                f"/shows/{trakt_id}/progress/watched"
+                "?hidden=false&specials=false&count_specials=false"
+            )
+            if not isinstance(progress, dict):
+                continue
+            next_ep = progress.get("next_episode")
+            if not next_ep:
+                continue  # show is up to date on aired episodes
+            results.append(
+                {
+                    "show": show,
+                    "next_episode": next_ep,
+                    "aired": progress.get("aired"),
+                    "completed": progress.get("completed"),
+                    "last_watched_at": entry.get("last_watched_at"),
+                }
+            )
+        return results

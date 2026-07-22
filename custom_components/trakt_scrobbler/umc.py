@@ -74,6 +74,28 @@ def movie_calendar_to_umc(entry: dict) -> dict:
     }
 
 
+def next_to_watch_to_umc(entry: dict) -> dict:
+    """Map a next-to-watch entry (show + next_episode) to a UMC item."""
+    show = entry.get("show") or {}
+    ep = entry.get("next_episode") or {}
+    season = ep.get("season")
+    number = ep.get("number")
+    return {
+        "title": show.get("title"),
+        "episode": ep.get("title"),
+        "number": f"S{season:02d}E{number:02d}"
+        if season is not None and number is not None
+        else "",
+        "airdate": ep.get("first_aired"),
+        "release": ep.get("first_aired"),
+        "poster": _image_url(show.get("images"), "poster"),
+        "fanart": _image_url(show.get("images"), "fanart"),
+        "rating": show.get("rating"),
+        "genres": ", ".join(show.get("genres") or []),
+        "deep_link": _trakt_link("show", show.get("ids")),
+    }
+
+
 def _trakt_link(kind: str, ids: dict | None) -> str:
     """Build a trakt.tv link for a show/movie from its ids."""
     if not ids:

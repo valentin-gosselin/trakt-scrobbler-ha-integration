@@ -51,6 +51,10 @@ GROUP_RECO = "recommendations"
 # Default polling interval for the data coordinator (hours).
 DEFAULT_SCAN_INTERVAL_HOURS = 3
 
+# Next-to-watch requires one progress request per show; cap how many of the
+# most recently watched shows we check per refresh to respect Trakt rate limits.
+NEXT_TO_WATCH_MAX_SHOWS = 40
+
 # Options that enable/disable each sensor group (added to the options flow in a
 # later story). Defaults: the two headline groups on, the rest off, so users
 # aren't flooded with entities they didn't ask for.
