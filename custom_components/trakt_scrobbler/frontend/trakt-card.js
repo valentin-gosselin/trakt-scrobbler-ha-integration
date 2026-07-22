@@ -166,6 +166,7 @@ class TraktCard extends HTMLElement {
           ids: d.ids,
           season: d.season,
           number_int: d.number_int,
+          media_type: d.media_type,
         }));
     }
     const max = this._config.max || 20;
@@ -256,29 +257,37 @@ class TraktCard extends HTMLElement {
     for (const k of ["trakt", "imdb", "tmdb", "tvdb"]) {
       if (ids[k]) idFields[k] = String(ids[k]);
     }
-    const isEpisode = !!item.number || this._view === "next_to_watch";
-    const mediaType = isEpisode ? "show" : "movie";
+    // The item's own media_type is authoritative (show or movie). Never guess
+    // from the presence of an episode number, which mismatched shows to movies.
+    const mediaType =
+      item.media_type ||
+      (item.number || this._view === "next_to_watch" ? "show" : "movie");
+    const isShow = mediaType === "show";
 
-    // Immediate visual feedback: fade the row out.
+    // Immediate visual feedback: remove the row right away so it feels instant.
     const row = btn ? btn.closest(".tk-item") : null;
     if (row) {
-      row.style.transition = "opacity .2s";
-      row.style.opacity = "0.35";
+      row.style.transition = "opacity .2s, height .2s";
+      row.style.opacity = "0";
+      setTimeout(() => row.remove(), 200);
     }
 
     try {
       if (act === "watchlist") {
         await this._hass.callService("trakt_scrobbler", "add_to_watchlist", {
-          media_type: mediaType,
+          media_type: isShow ? "show" : "movie",
           title: item.title,
           ...idFields,
         });
       } else if (act === "watched") {
+        // Mark the specific episode when we have season/number (shows in the
+        // upcoming/next lists), else mark the movie.
+        const asEpisode = isShow && item.number_int != null;
         const data = {
-          media_type: isEpisode ? "episode" : "movie",
+          media_type: asEpisode ? "episode" : isShow ? "episode" : "movie",
           ...idFields,
         };
-        if (isEpisode && item.season != null && item.number_int != null) {
+        if (asEpisode && item.season != null) {
           data.season = item.season;
           data.episode = item.number_int;
         }
@@ -286,8 +295,7 @@ class TraktCard extends HTMLElement {
         await this._hass.callService("trakt_scrobbler", "mark_watched", data);
       }
       this._toast(act);
-      // Refresh the sensor so the item disappears / the next episode shows up.
-      // Give Trakt a moment to register the change first.
+      // Refresh the sensor so the data catches up (next episode appears).
       setTimeout(() => {
         this._hass.callService("homeassistant", "update_entity", {
           entity_id: this._entity,

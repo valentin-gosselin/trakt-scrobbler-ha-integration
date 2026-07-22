@@ -110,6 +110,7 @@ def show_calendar_to_umc(entry: dict) -> dict:
         "ids": _ids(show),
         "season": season,
         "number_int": number,
+        "media_type": "show",
     }
 
 
@@ -128,6 +129,7 @@ def movie_calendar_to_umc(entry: dict) -> dict:
         "genres": ", ".join(movie.get("genres") or []),
         "deep_link": _trakt_link("movie", movie.get("ids")),
         "ids": _ids(movie),
+        "media_type": "movie",
     }
 
 
@@ -153,12 +155,14 @@ def next_to_watch_to_umc(entry: dict) -> dict:
         "ids": _ids(show),
         "season": season,
         "number_int": number,
+        "media_type": "show",
     }
 
 
 def recommendation_to_umc(obj: dict, kind: str) -> dict:
     """Map a recommended show/movie object to a UMC item."""
     year = obj.get("year")
+    single = kind[:-1] if kind.endswith("s") else kind  # shows -> show
     return {
         "title": obj.get("title"),
         "episode": str(year) if year else "",
@@ -168,8 +172,9 @@ def recommendation_to_umc(obj: dict, kind: str) -> dict:
         "fanart": _image_url(obj.get("images"), "fanart"),
         "rating": _round1(obj.get("rating")),
         "genres": ", ".join(obj.get("genres") or []),
-        "deep_link": _trakt_link(kind[:-1] if kind.endswith("s") else kind, obj.get("ids")),
+        "deep_link": _trakt_link(single, obj.get("ids")),
         "ids": _ids(obj),
+        "media_type": single,  # "show" or "movie", so actions target correctly
     }
 
 

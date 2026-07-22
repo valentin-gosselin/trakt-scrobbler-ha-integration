@@ -286,7 +286,8 @@ class TraktRecommendationsSensor(TraktBaseSensor):
                 {
                     "title": obj.get("title"),
                     "year": obj.get("year"),
-                    "ids": obj.get("ids"),
+                    "ids": m.get("ids"),  # cleaned ids (no plex/slug)
+                    "media_type": m.get("media_type"),  # show or movie
                     "overview": obj.get("overview"),
                     "poster": m.get("poster"),
                     "fanart": m.get("fanart"),
