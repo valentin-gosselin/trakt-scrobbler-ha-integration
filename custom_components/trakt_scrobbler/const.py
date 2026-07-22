@@ -95,6 +95,15 @@ SERVICE_IMPORT_PLEX_HISTORY = "import_plex_history"
 ATTR_START_DATE = "start_date"
 ATTR_DRY_RUN = "dry_run"
 
+# Services: act on Trakt (watchlist, mark watched)
+SERVICE_ADD_TO_WATCHLIST = "add_to_watchlist"
+SERVICE_REMOVE_FROM_WATCHLIST = "remove_from_watchlist"
+SERVICE_MARK_WATCHED = "mark_watched"
+ATTR_MEDIA_TYPE_FIELD = "media_type"
+ATTR_TITLE = "title"
+ATTR_SEASON_FIELD = "season"
+ATTR_EPISODE_FIELD = "episode"
+
 # Batch size for pushing items to /sync/history
 HISTORY_BATCH_SIZE = 100
 # Storage key that remembers the last synced watch date (for auto-sync)

@@ -24,6 +24,7 @@ from .const import (
 from .coordinator import TraktDataCoordinator
 from .history_sync import HistorySync
 from .options import enabled_groups
+from .services_trakt import async_register_trakt_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
 
     _async_register_services(hass)
+    async_register_trakt_services(hass)
     _async_setup_auto_sync(hass, entry, config)
     _async_maybe_import_on_setup(hass, entry, config)
 

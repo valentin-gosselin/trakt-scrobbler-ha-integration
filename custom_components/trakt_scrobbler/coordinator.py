@@ -99,6 +99,31 @@ class TraktDataCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Trakt GET %s failed: %s", endpoint, err)
         return None
 
+    async def async_post(self, endpoint: str, payload: dict):
+        """Authenticated POST against the Trakt API; returns parsed JSON or None."""
+        url = f"{TRAKT_API_URL}{endpoint}"
+        try:
+            async with self._session.post(
+                url,
+                headers=self._headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status in (200, 201):
+                    return await resp.json()
+                if resp.status == 429:
+                    _LOGGER.warning("Trakt rate limit hit on POST %s", endpoint)
+                elif resp.status == 401:
+                    _LOGGER.error("Trakt auth error on POST %s", endpoint)
+                else:
+                    text = await resp.text()
+                    _LOGGER.error(
+                        "Trakt POST %s returned %s: %s", endpoint, resp.status, text
+                    )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Trakt POST %s failed: %s", endpoint, err)
+        return None
+
     async def _async_update_data(self) -> dict:
         """Fetch data for the enabled groups.
 
