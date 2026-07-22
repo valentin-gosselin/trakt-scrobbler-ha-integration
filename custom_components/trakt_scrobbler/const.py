@@ -40,6 +40,34 @@ TRAKT_API_URL = "https://api.trakt.tv"
 TRAKT_API_VERSION = "2"
 TRAKT_APP_ID = "Home Assistant Trakt Scrobbler"
 
+# Sensor data groups (each maps to a set of Trakt read endpoints and can be
+# enabled/disabled independently in the options).
+GROUP_UPCOMING = "upcoming"
+GROUP_NEXT = "next_to_watch"
+GROUP_WATCHLIST = "watchlist"
+GROUP_STATS = "stats"
+GROUP_RECO = "recommendations"
+
+# Default polling interval for the data coordinator (hours).
+DEFAULT_SCAN_INTERVAL_HOURS = 3
+
+# Options that enable/disable each sensor group (added to the options flow in a
+# later story). Defaults: the two headline groups on, the rest off, so users
+# aren't flooded with entities they didn't ask for.
+CONF_ENABLE_UPCOMING = "enable_upcoming"
+CONF_ENABLE_NEXT = "enable_next_to_watch"
+CONF_ENABLE_WATCHLIST = "enable_watchlist"
+CONF_ENABLE_STATS = "enable_stats"
+CONF_ENABLE_RECO = "enable_recommendations"
+CONF_UPCOMING_DAYS = "upcoming_days"
+
+DEFAULT_ENABLE_UPCOMING = True
+DEFAULT_ENABLE_NEXT = True
+DEFAULT_ENABLE_WATCHLIST = False
+DEFAULT_ENABLE_STATS = False
+DEFAULT_ENABLE_RECO = False
+DEFAULT_UPCOMING_DAYS = 30
+
 # Where users can create/manage their own Trakt API app (advanced mode).
 TRAKT_APPS_URL = "https://app.trakt.tv/settings/apps/api/new"
 

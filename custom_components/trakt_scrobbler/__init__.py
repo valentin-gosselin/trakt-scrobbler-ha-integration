@@ -21,15 +21,19 @@ from .const import (
     DOMAIN,
     SERVICE_IMPORT_PLEX_HISTORY,
 )
+from .coordinator import TraktDataCoordinator
 from .history_sync import HistorySync
+from .options import enabled_groups
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
+PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER, Platform.SENSOR]
 
 # Where the media_player platform registers its live entities so the service
 # can reach their Plex + Trakt access.
 DATA_ENTITIES = "entities"
+# Key under which the data coordinator is stored per entry.
+DATA_COORDINATOR = "coordinator"
 
 IMPORT_HISTORY_SCHEMA = vol.Schema(
     {
@@ -45,11 +49,18 @@ async def async_setup_entry(
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(DATA_ENTITIES, {})
+    hass.data[DOMAIN].setdefault(DATA_COORDINATOR, {})
     # Merge entry.data and entry.options
     config = {**entry.data, **entry.options}
     hass.data[DOMAIN][entry.entry_id] = config
 
-    # Forward the setup to the media_player platform
+    # Build the data coordinator for the enabled sensor groups and do a first
+    # refresh before forwarding platforms so sensors have data on creation.
+    coordinator = TraktDataCoordinator(hass, entry, enabled_groups(entry))
+    await coordinator.async_config_entry_first_refresh()
+    hass.data[DOMAIN][DATA_COORDINATOR][entry.entry_id] = coordinator
+
+    # Forward the setup to the platforms (media_player scrobbler + sensors)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Set up reload listener
@@ -184,5 +195,6 @@ async def async_unload_entry(
     # Remove config entry from domain
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        hass.data[DOMAIN].get(DATA_COORDINATOR, {}).pop(entry.entry_id, None)
 
     return unload_ok
