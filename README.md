@@ -12,13 +12,15 @@ A Home Assistant integration that automatically scrobbles what you're watching f
 - ⚙️ Configurable scrobble threshold (default 80%)
 - 👀 Update "Currently Watching" status on Trakt
 - 🏠 Conditional scrobbling based on presence or switches
-- 🔐 Secure OAuth2 authentication with Device Flow
+- 🔐 Two-click setup: a built-in Trakt app means you just authorize, no API app to create
+- 🧩 Plex sign-in via PIN, automatic server discovery, and per-library selection
+- 📥 Import your existing Plex watch history into Trakt (great when migrating from another tracker), with optional automatic sync
 
 ## Requirements
 
-- Home Assistant 2023.1 or newer
+- Home Assistant 2024.1 or newer
 - A Trakt.tv account
-- A Trakt API application (free)
+- Optional: a Plex Media Server for richer metadata and history import
 
 ## Installation
 
@@ -37,34 +39,52 @@ A Home Assistant integration that automatically scrobbles what you're watching f
 
 ## Configuration
 
-### Step 1: Create a Trakt Application
+Add the integration and follow the steps. There is no Trakt app to create: the
+integration ships with a built-in one.
 
-1. Go to [Trakt Apps](https://trakt.tv/oauth/applications)
-2. Click "New Application"
-3. Fill in the details:
-   - **Name**: Home Assistant Scrobbler (or any name you prefer)
-   - **Description**: Scrobbles from Home Assistant
-   - **Redirect URI**: `urn:ietf:wg:oauth:2.0:oob`
-   - **Javascript (cors) origins**: Leave empty
-   - **Permissions**: Check "scrobble"
-4. Save the application
-5. Note your **Client ID** and **Client Secret**
+1. Go to Settings > Devices & Services
+2. Click "Add Integration" and search for "Trakt Scrobbler"
+3. **Authorize Trakt**: visit the shown URL, enter the code, and authorize.
+4. **Options**: pick the media players to monitor, the scrobble percentage
+   (default 80%), whether to update "Currently Watching", and optional
+   conditional entities (only scrobble when a person is home, a switch is on, etc.).
+5. **Connect Plex (optional)**: choose whether to connect a Plex account.
+   - Authorize Plex by opening the shown link and signing in (PIN flow).
+   - Pick your Plex server from the discovered list.
+   - Select which Plex libraries to include, and unselect any you don't want on
+     Trakt (for example personal or home video libraries).
+6. **Import history (optional)**: optionally backfill your Trakt history from
+   Plex right away (see below).
 
-### Step 2: Add Integration in Home Assistant
+### Advanced: use your own Trakt app
 
-1. Go to Settings → Devices & Services
-2. Click "Add Integration"
-3. Search for "Trakt Scrobbler"
-4. Enter your Client ID and Client Secret
-5. Follow the device authorization flow:
-   - Visit the provided URL
-   - Enter the code shown
-   - Authorize the application
-6. Configure your options:
-   - Select media players to monitor
-   - Set scrobble percentage (default 80%)
-   - Enable/disable "Currently Watching" updates
-   - Optional: Add entities for conditional scrobbling
+If you prefer to use your own Trakt application, create one at
+[trakt.tv/settings/apps/api/new](https://app.trakt.tv/settings/apps/api/new)
+with redirect URI `urn:ietf:wg:oauth:2.0:oob` and the `scrobble` permission.
+When the built-in credentials can't be used, the setup falls back to asking for
+a Client ID and Client Secret.
+
+## Importing your Plex history into Trakt
+
+If you're moving from another tracker (like TV Time) and want your past
+viewing on Trakt, you can backfill it from your Plex watch history.
+
+- **During setup**: after connecting Plex and choosing libraries, tick the
+  import step. Leave the start date empty to import everything, or set it (for
+  example your TV Time import date) to import only from then on.
+- **Any time**: call the `trakt_scrobbler.import_plex_history` action from
+  Developer Tools > Actions, with an optional `start_date` and a `dry_run`
+  option (on by default) that only logs what would be added.
+- **Keep it in sync**: enable "Automatically sync Plex history to Trakt" in the
+  integration options to periodically import recent Plex history.
+
+Notes:
+
+- Only your own watches are imported, never other Plex users' history on a
+  shared server.
+- It is deduplicated against your existing Trakt history, so running it more
+  than once is safe.
+- Content in unselected libraries (personal videos, etc.) is skipped.
 
 ## Configuration Options
 
@@ -175,9 +195,4 @@ If you find this integration useful, please:
 
 ## Changelog
 
-### 1.0.0
-- Initial release
-- OAuth2 authentication with device flow
-- Movie and TV show scrobbling
-- Configurable options
-- Multi-language support (EN, FR)
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.

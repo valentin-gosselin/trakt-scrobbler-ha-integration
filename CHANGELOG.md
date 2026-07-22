@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-22
+
+### Added
+- **Built-in Trakt app**: setup no longer requires creating your own Trakt API application or pasting a client id/secret. The config flow goes straight to device authorization: open the activation URL, enter the code, done. Manual client id/secret entry remains available as a fallback.
+- **Plex PIN authentication**: connect Plex through the standard plex.tv PIN flow instead of pasting an `X-Plex-Token` by hand (which expires). The token obtained this way is durable.
+- **Plex server auto-discovery**: after authorizing, the integration lists your Plex Media Servers and lets you pick one, probing which connections actually respond so it doesn't point at an offline server.
+- **Plex library selection**: choose which Plex libraries to scrobble and import from. Personal/home video libraries can be excluded so they never reach Trakt (applied to both real-time scrobbling and history import).
+- **Import Plex history into Trakt (backfill)**: a service `trakt_scrobbler.import_plex_history` and an optional step during setup to backfill your Trakt history from Plex, using the real watch dates. Useful when migrating from another tracker (e.g. TV Time).
+  - Only the token owner's watches are imported, never other Plex users' history.
+  - Deduplicated against your existing Trakt history, so re-running is safe.
+  - Items without ids are resolved by Trakt title search, and unmatched titles (personal videos) are skipped.
+  - A `dry_run` mode logs what would be added without sending anything.
+- **Automatic periodic history sync**: optional setting to keep Trakt in sync with recent Plex history on an interval.
+
+### Changed
+- Shared Plex-to-Trakt mapping (guid parsing, Trakt search) between the real-time scrobbler and the history import so both behave consistently.
+- Completed French, German and Spanish translations for all setup and options steps.
+
 ## [1.1.0] - 2025-08-07
 
 ### Added

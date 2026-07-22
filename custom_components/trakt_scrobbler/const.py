@@ -15,16 +15,40 @@ CONF_UPDATE_WATCHING = "update_watching"
 CONF_PLEX_SERVER_URL = "plex_server_url"
 CONF_PLEX_TOKEN = "plex_token"
 CONF_DEBUG_MODE = "debug_mode"
+CONF_AUTO_SYNC_HISTORY = "auto_sync_history"
+CONF_AUTO_SYNC_INTERVAL_HOURS = "auto_sync_interval_hours"
+CONF_PLEX_CLIENT_ID = "plex_client_id"
+# Plex library section keys the user chose to import/scrobble from. Empty or
+# missing means "all video libraries" (backward compatible).
+CONF_PLEX_LIBRARIES = "plex_libraries"
+# One-shot backfill requested during setup (consumed once, then cleared).
+CONF_IMPORT_ON_SETUP = "import_on_setup"
+CONF_IMPORT_START_DATE = "import_start_date"
+
+# Plex authentication (PIN flow via plex.tv)
+PLEX_PRODUCT = "Home Assistant Trakt Scrobbler"
+PLEX_PINS_URL = "https://plex.tv/api/v2/pins"
+PLEX_AUTH_APP_URL = "https://app.plex.tv/auth"
 
 # OAuth URLs
 OAUTH_AUTHORIZE_URL = "https://trakt.tv/oauth/authorize"
 OAUTH_TOKEN_URL = "https://api.trakt.tv/oauth/token"
 OAUTH_REDIRECT_URI = "https://my.home-assistant.io/redirect/oauth"
 
-# API Configuration  
+# API Configuration
 TRAKT_API_URL = "https://api.trakt.tv"
 TRAKT_API_VERSION = "2"
 TRAKT_APP_ID = "Home Assistant Trakt Scrobbler"
+
+# Where users can create/manage their own Trakt API app (advanced mode).
+TRAKT_APPS_URL = "https://app.trakt.tv/settings/apps/api/new"
+
+# Built-in Trakt app credentials so users don't have to create their own app.
+# For the OAuth device flow these are shipped with the client by design; Trakt
+# treats them as public identifiers for a distributed application, not secrets.
+# TODO: fill these in with the integration's own Trakt application before release.
+TRAKT_BUILTIN_CLIENT_ID = "abDhseoq2ze4ROIPOS7RsVH-w1odJVz6FoVZnV3pXic"
+TRAKT_BUILTIN_CLIENT_SECRET = "BALzkBPJGTnTbNDrBUScURR2kYQvyeIb_9V_Psjanw4"
 
 # API Endpoints
 SCROBBLE_START = "/scrobble/start"
@@ -32,11 +56,24 @@ SCROBBLE_PAUSE = "/scrobble/pause"
 SCROBBLE_STOP = "/scrobble/stop"
 SEARCH = "/search/{type}"
 HISTORY = "/sync/history/{type}"
+SYNC_HISTORY = "/sync/history"
+
+# Service: import Plex watch history into Trakt (backfill)
+SERVICE_IMPORT_PLEX_HISTORY = "import_plex_history"
+ATTR_START_DATE = "start_date"
+ATTR_DRY_RUN = "dry_run"
+
+# Batch size for pushing items to /sync/history
+HISTORY_BATCH_SIZE = 100
+# Storage key that remembers the last synced watch date (for auto-sync)
+STORAGE_KEY_LAST_SYNC = "last_history_sync"
 
 # Defaults
 DEFAULT_SCROBBLE_PERCENTAGE = 80
 DEFAULT_UPDATE_WATCHING = True
 DEFAULT_DEBUG_MODE = False
+DEFAULT_AUTO_SYNC_HISTORY = False
+DEFAULT_AUTO_SYNC_INTERVAL_HOURS = 6
 MIN_DURATION_SECONDS = 300  # 5 minutes for movies
 MIN_EPISODE_DURATION_SECONDS = 60  # 1 minute for episodes (Bref, Kaamelott, etc.)
 

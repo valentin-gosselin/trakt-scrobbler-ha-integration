@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+import uuid
 
 import aiohttp
 import voluptuous as vol
@@ -13,25 +14,40 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import (
+    DateTimeSelector,
     EntityFilterSelectorConfig,
     EntitySelector,
     EntitySelectorConfig,
 )
 
+from . import plex_auth
+
 from .const import (
+    CONF_AUTO_SYNC_HISTORY,
+    CONF_AUTO_SYNC_INTERVAL_HOURS,
     CONF_CHECK_ENTITY,
+    CONF_IMPORT_ON_SETUP,
+    CONF_IMPORT_START_DATE,
+    CONF_PLEX_LIBRARIES,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_MEDIA_PLAYERS,
+    CONF_PLEX_CLIENT_ID,
     CONF_PLEX_SERVER_URL,
     CONF_PLEX_TOKEN,
     CONF_SCROBBLE_PERCENTAGE,
     CONF_UPDATE_WATCHING,
+    DEFAULT_AUTO_SYNC_HISTORY,
+    DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
     DEFAULT_SCROBBLE_PERCENTAGE,
     DEFAULT_UPDATE_WATCHING,
     DOMAIN,
     TRAKT_API_URL,
+    TRAKT_APPS_URL,
+    TRAKT_BUILTIN_CLIENT_ID,
+    TRAKT_BUILTIN_CLIENT_SECRET,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,17 +69,36 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._data = {}
         self._device_info = None
         self._errors = {}
+        self._plex_pin_id = None
+        self._plex_auth_url = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step - get client credentials."""
+        """Handle the initial step.
+
+        If the integration ships built-in Trakt app credentials, the user
+        doesn't create their own app: we go straight to authorization. If not
+        (or in advanced setups), fall back to asking for client credentials.
+        """
         errors: dict[str, str] = {}
+
+        # Fast path: built-in app credentials, nothing for the user to enter.
+        if TRAKT_BUILTIN_CLIENT_ID and TRAKT_BUILTIN_CLIENT_SECRET:
+            self._data[CONF_CLIENT_ID] = TRAKT_BUILTIN_CLIENT_ID
+            self._data[CONF_CLIENT_SECRET] = TRAKT_BUILTIN_CLIENT_SECRET
+            try:
+                await self._get_device_code()
+                return await self.async_step_device()
+            except Exception as e:  # noqa: BLE001
+                _LOGGER.error("Error getting device code: %s", e)
+                # Fall through to manual entry so setup isn't fully blocked.
+                errors["base"] = "device_code_failed"
 
         if user_input is not None:
             self._data[CONF_CLIENT_ID] = user_input[CONF_CLIENT_ID]
             self._data[CONF_CLIENT_SECRET] = user_input[CONF_CLIENT_SECRET]
-            
+
             try:
                 # Get device code from Trakt
                 await self._get_device_code()
@@ -84,7 +119,7 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
             description_placeholders={
-                "trakt_app_url": "https://trakt.tv/oauth/applications",
+                "trakt_app_url": TRAKT_APPS_URL,
             },
         )
 
@@ -129,19 +164,12 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Store all configuration
             self._data.update(user_input)
-            
+
             # Check if all optional fields have default values
             self._data.setdefault(CONF_CHECK_ENTITY, [])
-            
-            # Create unique title
-            existing_entries = self._async_current_entries()
-            if existing_entries:
-                count = len(existing_entries) + 1
-                title = f"{user_input[CONF_NAME]} {count}"
-            else:
-                title = user_input[CONF_NAME]
-                
-            return self.async_create_entry(title=title, data=self._data)
+
+            # Move on to the optional Plex connection step.
+            return await self.async_step_plex_ask()
 
         schema = vol.Schema(
             {
@@ -166,14 +194,167 @@ class TraktScrobblerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
-                vol.Optional(CONF_PLEX_SERVER_URL): str,
-                vol.Optional(CONF_PLEX_TOKEN): str,
             }
         )
 
         return self.async_show_form(
             step_id="options", data_schema=schema, errors=errors
         )
+
+    async def async_step_plex_ask(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Ask whether to connect a Plex account (optional)."""
+        if user_input is not None:
+            if user_input.get("connect_plex"):
+                return await self.async_step_plex_pin()
+            # Skip Plex entirely and finish.
+            return self._create_entry()
+
+        schema = vol.Schema({vol.Required("connect_plex", default=False): bool})
+        return self.async_show_form(step_id="plex_ask", data_schema=schema)
+
+    async def async_step_plex_pin(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Generate a Plex PIN and wait for the user to authorize it."""
+        # Stable client identifier for this integration instance.
+        if not self._data.get(CONF_PLEX_CLIENT_ID):
+            self._data[CONF_PLEX_CLIENT_ID] = str(uuid.uuid4())
+        client_id = self._data[CONF_PLEX_CLIENT_ID]
+
+        if user_input is not None:
+            # User clicked submit after authorizing: check the PIN.
+            token = await plex_auth.async_check_pin(self._plex_pin_id, client_id)
+            if not token:
+                return self.async_show_form(
+                    step_id="plex_pin",
+                    errors={"base": "plex_not_authorized"},
+                    description_placeholders={"auth_url": self._plex_auth_url},
+                )
+            self._data[CONF_PLEX_TOKEN] = token
+            return await self.async_step_plex_server()
+
+        pin = await plex_auth.async_create_pin(client_id)
+        if not pin or not pin.get("code"):
+            return self.async_abort(reason="plex_pin_failed")
+        self._plex_pin_id = pin["id"]
+        self._plex_auth_url = plex_auth.build_auth_url(client_id, pin["code"])
+
+        return self.async_show_form(
+            step_id="plex_pin",
+            description_placeholders={"auth_url": self._plex_auth_url},
+        )
+
+    async def async_step_plex_server(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Discover the user's Plex servers and let them pick one."""
+        token = self._data[CONF_PLEX_TOKEN]
+
+        if user_input is not None:
+            self._data[CONF_PLEX_SERVER_URL] = user_input[CONF_PLEX_SERVER_URL]
+            return await self.async_step_plex_libraries()
+
+        try:
+            servers = await self.hass.async_add_executor_job(
+                plex_auth.discover_servers, token
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to discover Plex servers: %s", err)
+            servers = []
+
+        if not servers:
+            # Authenticated but no server found: finish without a server URL.
+            return self._create_entry()
+
+        def _label(server: dict) -> str:
+            status = "" if server.get("reachable", True) else " - unreachable"
+            return f"{server['name']} ({server['url']}){status}"
+
+        options = {s["url"]: _label(s) for s in servers}
+        # Default to the first server, which is the first reachable one.
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_PLEX_SERVER_URL, default=servers[0]["url"]
+                ): vol.In(options)
+            }
+        )
+        return self.async_show_form(step_id="plex_server", data_schema=schema)
+
+    async def async_step_plex_libraries(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Let the user pick which Plex libraries to import and scrobble from."""
+        if user_input is not None:
+            self._data[CONF_PLEX_LIBRARIES] = user_input.get(
+                CONF_PLEX_LIBRARIES, []
+            )
+            return await self.async_step_import_ask()
+
+        try:
+            libraries = await self.hass.async_add_executor_job(
+                plex_auth.list_libraries,
+                self._data[CONF_PLEX_SERVER_URL],
+                self._data[CONF_PLEX_TOKEN],
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to list Plex libraries: %s", err)
+            libraries = []
+
+        if not libraries:
+            # Could not list libraries: proceed without a filter (import all).
+            self._data[CONF_PLEX_LIBRARIES] = []
+            return await self.async_step_import_ask()
+
+        options = {
+            lib["key"]: f"{lib['title']} ({lib['type']})" for lib in libraries
+        }
+        # Default: all libraries selected, so nothing is silently dropped.
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_PLEX_LIBRARIES, default=list(options.keys())
+                ): cv.multi_select(options)
+            }
+        )
+        return self.async_show_form(
+            step_id="plex_libraries", data_schema=schema
+        )
+
+    async def async_step_import_ask(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Offer to backfill Plex watch history into Trakt right after setup."""
+        if user_input is not None:
+            if user_input.get(CONF_IMPORT_ON_SETUP):
+                # Stored in the entry; async_setup_entry runs the backfill once
+                # in the background, then clears these keys.
+                self._data[CONF_IMPORT_ON_SETUP] = True
+                start = user_input.get(CONF_IMPORT_START_DATE)
+                self._data[CONF_IMPORT_START_DATE] = (
+                    start.isoformat() if start else None
+                )
+            return self._create_entry()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_IMPORT_ON_SETUP, default=False): bool,
+                vol.Optional(CONF_IMPORT_START_DATE): DateTimeSelector(),
+            }
+        )
+        return self.async_show_form(step_id="import_ask", data_schema=schema)
+
+    def _create_entry(self) -> FlowResult:
+        """Create the config entry with a unique title."""
+        existing_entries = self._async_current_entries()
+        if existing_entries:
+            count = len(existing_entries) + 1
+            title = f"{self._data[CONF_NAME]} {count}"
+        else:
+            title = self._data[CONF_NAME]
+        return self.async_create_entry(title=title, data=self._data)
 
     async def _get_device_code(self):
         """Get device code from Trakt API."""
@@ -307,6 +488,25 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.data.get(CONF_PLEX_TOKEN, "")
                     ),
                 ): str,
+                vol.Required(
+                    CONF_AUTO_SYNC_HISTORY,
+                    default=self.config_entry.options.get(
+                        CONF_AUTO_SYNC_HISTORY,
+                        self.config_entry.data.get(
+                            CONF_AUTO_SYNC_HISTORY, DEFAULT_AUTO_SYNC_HISTORY
+                        ),
+                    ),
+                ): bool,
+                vol.Required(
+                    CONF_AUTO_SYNC_INTERVAL_HOURS,
+                    default=self.config_entry.options.get(
+                        CONF_AUTO_SYNC_INTERVAL_HOURS,
+                        self.config_entry.data.get(
+                            CONF_AUTO_SYNC_INTERVAL_HOURS,
+                            DEFAULT_AUTO_SYNC_INTERVAL_HOURS,
+                        ),
+                    ),
+                ): int,
             }
         )
 

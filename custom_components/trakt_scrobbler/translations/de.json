@@ -3,35 +3,69 @@
     "step": {
       "user": {
         "title": "Trakt Scrobbler Konfiguration",
-        "description": "Um Trakt Scrobbler zu konfigurieren, müssen Sie eine App auf Trakt erstellen:\n\n1. Gehen Sie zu {trakt_app_url}\n2. Erstellen Sie eine neue App\n3. Setzen Sie die Redirect-URI auf: `urn:ietf:wg:oauth:2.0:oob`\n4. Kopieren Sie Ihre Client ID und Client Secret",
+        "description": "Um Trakt Scrobbler einzurichten, müssen Sie eine App auf Trakt erstellen:\n\n1. Gehen Sie zu {trakt_app_url}\n2. Erstellen Sie eine neue App\n3. Setzen Sie die Redirect-URI auf: `urn:ietf:wg:oauth:2.0:oob`\n4. Kopieren Sie Ihre Client-ID und Ihr Client-Secret",
         "data": {
-          "client_id": "Client ID",
-          "client_secret": "Client Secret"
+          "client_id": "Client-ID",
+          "client_secret": "Client-Secret"
         }
       },
       "device": {
         "title": "Gerät aktivieren",
-        "description": "Um die Einrichtung abzuschließen:\n\n1. Besuchen Sie: **{verification_url}**\n2. Geben Sie den Code ein: **{user_code}**\n3. Klicken Sie nach der Autorisierung auf Senden"
+        "description": "So schließen Sie die Einrichtung ab:\n\n1. Besuchen Sie: **{verification_url}**\n2. Geben Sie den Code ein: **{user_code}**\n3. Klicken Sie nach der Autorisierung unten auf Absenden"
       },
       "options": {
         "title": "Scrobbler-Optionen konfigurieren",
         "data": {
-          "name": "Integrationsname",
-          "media_players": "Zu überwachende Mediaplayer",
-          "scrobble_percentage": "Scrobbeln bei % gesehen",
-          "update_watching": "Status 'Schaue gerade' aktualisieren",
-          "check_entity": "Nur scrobbeln wenn diese Entitäten es erlauben"
+          "name": "Name der Integration",
+          "media_players": "Zu überwachende Media Player",
+          "scrobble_percentage": "Scrobbeln ab % angesehen",
+          "update_watching": "Status „Wird gerade angesehen“ aktualisieren",
+          "check_entity": "Nur scrobbeln, wenn diese Entitäten es erlauben"
+        }
+      },
+      "plex_ask": {
+        "title": "Plex verbinden (optional)",
+        "description": "Plex ist optional. Verbinden Sie es, um umfangreichere Metadaten zu erhalten und den Import Ihres Plex-Wiedergabeverlaufs nach Trakt zu ermöglichen.",
+        "data": {
+          "connect_plex": "Mein Plex-Konto verbinden"
+        }
+      },
+      "plex_pin": {
+        "title": "Plex autorisieren",
+        "description": "1. Öffnen Sie diesen Link in Ihrem Browser: **{auth_url}**\n2. Melden Sie sich an und autorisieren Sie die App\n3. Klicken Sie unten auf Absenden"
+      },
+      "plex_server": {
+        "title": "Plex-Server auswählen",
+        "data": {
+          "plex_server_url": "Plex-Server"
+        }
+      },
+      "plex_libraries": {
+        "title": "Plex-Bibliotheken auswählen",
+        "description": "Wählen Sie, aus welchen Plex-Bibliotheken gescrobbelt und importiert werden soll. Deaktivieren Sie Bibliotheken, die Sie nicht auf Trakt haben möchten, etwa private oder Familienvideo-Bibliotheken.",
+        "data": {
+          "plex_libraries": "Einzuschließende Bibliotheken"
+        }
+      },
+      "import_ask": {
+        "title": "Plex-Verlauf jetzt importieren?",
+        "description": "Optional können Sie Ihren Trakt-Verlauf direkt nach der Einrichtung aus Plex befüllen. Lassen Sie das Startdatum leer, um den gesamten verfügbaren Verlauf zu importieren, oder setzen Sie es (zum Beispiel auf Ihr TV-Time-Importdatum), um nur ab diesem Zeitpunkt zu importieren.",
+        "data": {
+          "import_on_setup": "Meinen Plex-Wiedergabeverlauf jetzt nach Trakt importieren",
+          "import_start_date": "Startdatum (optional)"
         }
       }
     },
     "error": {
-      "device_code_failed": "Fehler beim Abrufen des Gerätecodes von Trakt",
-      "token_poll_failed": "Fehler beim Abrufen des Zugriffstokens. Bitte versuchen Sie es erneut.",
+      "device_code_failed": "Gerätecode konnte nicht von Trakt abgerufen werden",
+      "token_poll_failed": "Zugriffstoken konnte nicht abgerufen werden. Bitte erneut versuchen.",
+      "plex_not_authorized": "Der Plex-PIN wurde noch nicht autorisiert. Autorisieren Sie ihn in Ihrem Browser und klicken Sie dann auf Absenden.",
       "unknown": "Ein unbekannter Fehler ist aufgetreten"
     },
     "abort": {
       "no_device_info": "Keine Geräteinformationen verfügbar",
-      "token_poll_failed": "Zugriffstoken konnte nicht von Trakt abgerufen werden"
+      "token_poll_failed": "Zugriffstoken konnte nicht von Trakt abgerufen werden",
+      "plex_pin_failed": "Es konnte kein Plex-PIN erstellt werden. Bitte erneut versuchen."
     }
   },
   "options": {
@@ -39,10 +73,14 @@
       "init": {
         "title": "Trakt Scrobbler Optionen",
         "data": {
-          "media_players": "Zu überwachende Mediaplayer",
-          "scrobble_percentage": "Scrobbeln bei % gesehen",
-          "update_watching": "Status 'Schaue gerade' aktualisieren",
-          "check_entity": "Nur scrobbeln wenn diese Entitäten es erlauben"
+          "media_players": "Zu überwachende Media Player",
+          "scrobble_percentage": "Scrobbeln ab % angesehen",
+          "update_watching": "Status „Wird gerade angesehen“ aktualisieren",
+          "check_entity": "Nur scrobbeln, wenn diese Entitäten es erlauben",
+          "plex_server_url": "Plex-Server-URL (optional)",
+          "plex_token": "Plex-Token (optional)",
+          "auto_sync_history": "Plex-Verlauf automatisch mit Trakt synchronisieren",
+          "auto_sync_interval_hours": "Intervall der automatischen Synchronisierung (Stunden)"
         }
       }
     }

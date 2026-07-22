@@ -14,8 +14,10 @@ from homeassistant.const import CONF_NAME, STATE_PLAYING, STATE_PAUSED
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from . import plex_trakt
 from .const import (
     CONF_PLEX_SERVER_URL,
+    CONF_PLEX_LIBRARIES,
     CONF_PLEX_TOKEN,
     ATTR_EPISODE,
     ATTR_IMDB_ID,
@@ -71,25 +73,31 @@ async def async_setup_entry(
     # Setup Plex (optional)
     plex_server_url = config.get(CONF_PLEX_SERVER_URL)
     plex_token = config.get(CONF_PLEX_TOKEN)
-    
-    async_add_entities(
-        [
-            TraktScrobblerMediaPlayer(
-                hass,
-                name,
-                client_id,
-                client_secret,
-                access_token,
-                refresh_token,
-                media_players,
-                check_entities,
-                scrobble_percentage,
-                update_watching,
-                plex_server_url,
-                plex_token,
-            )
-        ]
+    plex_libraries = config.get(CONF_PLEX_LIBRARIES, [])
+
+    entity = TraktScrobblerMediaPlayer(
+        hass,
+        name,
+        client_id,
+        client_secret,
+        access_token,
+        refresh_token,
+        media_players,
+        check_entities,
+        scrobble_percentage,
+        update_watching,
+        plex_server_url,
+        plex_token,
+        plex_libraries,
     )
+
+    # Register the entity so the history-import service can reach its
+    # Plex + Trakt access.
+    hass.data.setdefault(DOMAIN, {}).setdefault("entities", {})[
+        config_entry.entry_id
+    ] = entity
+
+    async_add_entities([entity])
 
 
 class TraktScrobblerMediaPlayer(MediaPlayerEntity):
@@ -109,10 +117,13 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         update_watching,
         plex_server_url,
         plex_token,
+        plex_libraries=None,
     ) -> None:
         """Initialize the Trakt scrobbler."""
         self.hass = hass
         self._name = name
+        # Plex library section keys to import/scrobble from ([] means all).
+        self._plex_libraries = [str(k) for k in (plex_libraries or [])]
         self._attr_unique_id = f"{DOMAIN}-{name}"
         self._state = None
         self._current_media = None
@@ -421,8 +432,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                     )
                     
                     if item:
+                        # Skip items from libraries the user chose not to
+                        # scrobble (e.g. personal home videos), if a filter is
+                        # configured.
+                        if self._plex_libraries:
+                            section_id = str(
+                                getattr(item, "librarySectionID", "") or ""
+                            )
+                            if section_id and section_id not in self._plex_libraries:
+                                _LOGGER.debug(
+                                    "Skipping Plex item from unselected library "
+                                    "(section %s): %s",
+                                    section_id,
+                                    getattr(item, "title", "?"),
+                                )
+                                return None
+
                         metadata = {}
-                        
+
                         # Determine if it's a movie or episode
                         if item.type == 'movie':
                             metadata['media_title'] = item.title
@@ -436,15 +463,13 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                             metadata['media_episode'] = item.episodeNumber
                             metadata['media_content_type'] = 'episode'
                             
-                        # Get external IDs if available
-                        if hasattr(item, 'guids'):
-                            for guid in item.guids:
-                                if 'imdb://' in guid.id:
-                                    metadata['imdb_id'] = guid.id.replace('imdb://', '')
-                                elif 'tmdb://' in guid.id:
-                                    metadata['tmdb_id'] = guid.id.replace('tmdb://', '')
-                                elif 'tvdb://' in guid.id:
-                                    metadata['tvdb_id'] = guid.id.replace('tvdb://', '')
+                        # Get external IDs if available (shared helper so the
+                        # scrobbler and the history backfill parse guids alike).
+                        guid_ids = plex_trakt.ids_from_plex_guids(
+                            getattr(item, "guids", None)
+                        )
+                        for kind, value in guid_ids.items():
+                            metadata[f"{kind}_id"] = value
                         
                         _LOGGER.debug("Plex metadata retrieved: %s", metadata)
                         return metadata
