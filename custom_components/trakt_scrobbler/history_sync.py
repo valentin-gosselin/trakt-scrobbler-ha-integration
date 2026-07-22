@@ -94,6 +94,7 @@ class HistorySync:
         """Bind to a scrobbler entity that provides Plex + Trakt access."""
         self._entity = entity
         self._hass = entity.hass
+        self._account_id = None
         self._store = Store(
             entity.hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_LAST_SYNC}"
         )
@@ -145,7 +146,7 @@ class HistorySync:
             return None
         try:
             items = await self._hass.async_add_executor_job(
-                lambda: plex.history(mindate=since)
+                self._read_own_history, plex, since
             )
         except Exception:  # noqa: BLE001
             return None
@@ -182,10 +183,12 @@ class HistorySync:
             summary["errors"] += 1
             return summary
 
-        # 1. Read Plex history since start_date (runs in executor: plexapi is sync)
+        # 1. Read Plex history since start_date, filtered to the token's own
+        #    account so we never scrobble other Plex users' watches. All Plex
+        #    I/O runs in the executor (plexapi is synchronous).
         try:
             plex_items = await self._hass.async_add_executor_job(
-                lambda: plex.history(mindate=start_date)
+                self._read_own_history, plex, start_date
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("Failed to read Plex history: %s", err)
@@ -287,6 +290,53 @@ class HistorySync:
             await asyncio.sleep(1)
             waited += 1
         return self._entity._plex_server
+
+    def _resolve_account_id(self, plex):
+        """Return the local Plex accountID that owns the configured token.
+
+        Plex history mixes every user of the server. To only import our own
+        watches we need the *local* accountID of the token holder, which is not
+        necessarily 1 (the owner): a shared/managed user has their own id. We
+        map the token's plex.tv username to the local accountID reported by the
+        server's systemAccounts. Result is cached on the instance.
+        """
+        if self._account_id is not None:
+            return self._account_id
+        try:
+            from plexapi.myplex import MyPlexAccount
+
+            token = self._entity._plex_token
+            username = MyPlexAccount(token=token).username
+            for sa in plex.systemAccounts():
+                if sa.name and username and sa.name.lower() == username.lower():
+                    self._account_id = sa.accountID
+                    _LOGGER.debug(
+                        "Resolved Plex account '%s' to local id %s",
+                        username,
+                        sa.accountID,
+                    )
+                    return self._account_id
+            _LOGGER.warning(
+                "Could not match the Plex token account '%s' to a server "
+                "account; history will not be filtered by user",
+                username,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Failed to resolve Plex account id: %s", err)
+        return None
+
+    def _read_own_history(self, plex, start_date):
+        """Read Plex history since start_date for the token's own account only."""
+        account_id = self._resolve_account_id(plex)
+        if account_id is not None:
+            return plex.history(mindate=start_date, accountID=account_id)
+        # Fallback: if we couldn't resolve the account, don't import anything
+        # rather than risk scrobbling other users' history.
+        _LOGGER.error(
+            "Refusing to import Plex history because the token's own account "
+            "could not be identified (avoids importing other users' watches)"
+        )
+        return []
 
     def _map_items(self, items: list) -> list:
         """Map Plex history items to Trakt entries (runs in an executor).
