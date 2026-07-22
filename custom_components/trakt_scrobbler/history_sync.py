@@ -440,10 +440,39 @@ class HistorySync:
 
 
 def _movie_body(entry: dict) -> dict:
-    """Return the movie portion of a /sync/history entry."""
-    return {"movie": entry["movie"]}
+    """Return the movie fields of a /sync/history entry.
+
+    Trakt wants the movie's title/year/ids flat on the entry (not wrapped in a
+    "movie" object), matching primarily by ids.
+    """
+    movie = entry.get("movie", {}) or {}
+    body: dict = {}
+    if movie.get("ids"):
+        body["ids"] = movie["ids"]
+    if movie.get("title"):
+        body["title"] = movie["title"]
+    if movie.get("year"):
+        body["year"] = movie["year"]
+    return body
 
 
 def _episode_body(entry: dict) -> dict:
-    """Return the show/episode portion of a /sync/history entry."""
-    return {"show": entry["show"], "episode": entry["episode"]}
+    """Return the episode portion of a /sync/history entry.
+
+    Trakt matches an episode most reliably by its own ids alone. When the
+    episode has ids we send just {ids}; otherwise we fall back to identifying it
+    by show title + season + episode number (which requires the show to be
+    resolvable by title on Trakt).
+    """
+    episode = entry.get("episode", {}) or {}
+    ids = episode.get("ids")
+    if ids:
+        return {"ids": ids}
+    # Fallback with no episode ids: identify via show title + season/number.
+    return {
+        "show": entry.get("show", {}),
+        "episode": {
+            "season": episode.get("season"),
+            "number": episode.get("number"),
+        },
+    }
