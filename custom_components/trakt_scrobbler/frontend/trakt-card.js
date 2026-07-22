@@ -127,11 +127,19 @@ class TraktCard extends HTMLElement {
 
   _renderStats(st) {
     const a = st.attributes || {};
+    const days = a.total_days;
+    const hero =
+      days != null
+        ? `<div class="tk-hero">
+             <ha-icon icon="mdi:filmstrip"></ha-icon>
+             <span><b>${this._esc(String(days))}</b> days watched</span>
+           </div>`
+        : "";
     const tiles = [
       ["mdi:movie", a.movies_watched, "Movies"],
       ["mdi:television-classic", a.episodes_watched, "Episodes"],
       ["mdi:playlist-play", a.shows_watched, "Shows"],
-      ["mdi:clock-outline", a.total_days, "Days"],
+      ["mdi:play-circle-outline", a.movies_plays, "Movie plays"],
     ];
     const body = tiles
       .map(
@@ -143,7 +151,7 @@ class TraktCard extends HTMLElement {
         </div>`
       )
       .join("");
-    this._card(`<div class="tk-stats">${body}</div>`);
+    this._card(`${hero}<div class="tk-stats">${body}</div>`);
   }
 
   _card(inner) {
@@ -153,27 +161,54 @@ class TraktCard extends HTMLElement {
       </ha-card>
       <style>
         .tk-body { padding: 0 12px 12px; }
-        .tk-list { display: flex; flex-direction: column; gap: 10px; }
+        .tk-list { display: flex; flex-direction: column; gap: 12px; }
         .tk-item {
-          display: flex; gap: 12px; align-items: flex-start;
-          text-decoration: none; color: var(--primary-text-color);
+          display: grid;
+          grid-template-columns: 62px 1fr;
+          gap: 12px;
+          align-items: start;
+          text-decoration: none;
+          color: var(--primary-text-color);
         }
         .tk-poster {
-          width: 62px; min-width: 62px; height: 92px; object-fit: cover;
+          width: 62px; height: 92px; object-fit: cover;
           border-radius: 6px; background: var(--secondary-background-color);
         }
-        .tk-noposter { display: block; }
-        .tk-info { display: flex; flex-direction: column; gap: 2px; }
-        .tk-title { font-weight: 600; }
-        .tk-line { font-size: 0.85em; color: var(--secondary-text-color); }
+        .tk-noposter {
+          display: flex; align-items: center; justify-content: center;
+        }
+        .tk-info {
+          display: flex; flex-direction: column; gap: 2px;
+          min-width: 0; padding-top: 2px;
+        }
+        .tk-title {
+          font-weight: 600; line-height: 1.2;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .tk-line {
+          font-size: 0.85em; color: var(--secondary-text-color);
+          line-height: 1.35;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         .tk-genres { font-style: italic; }
         .tk-empty { padding: 16px 0; color: var(--secondary-text-color); }
+        .tk-hero {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 0 4px; font-size: 1.1em;
+        }
+        .tk-hero ha-icon { color: var(--state-icon-color); }
+        .tk-hero b { font-size: 1.3em; }
         .tk-stats {
           display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
           padding-top: 8px; text-align: center;
         }
-        .tk-stat ha-icon { color: var(--state-icon-color); }
-        .tk-stat-value { font-size: 1.4em; font-weight: 600; }
+        .tk-stat {
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          padding: 12px 4px; border-radius: 10px;
+          background: var(--secondary-background-color);
+        }
+        .tk-stat ha-icon { color: var(--state-icon-color); --mdc-icon-size: 28px; }
+        .tk-stat-value { font-size: 1.5em; font-weight: 700; }
         .tk-stat-label { font-size: 0.8em; color: var(--secondary-text-color); }
       </style>`;
   }
