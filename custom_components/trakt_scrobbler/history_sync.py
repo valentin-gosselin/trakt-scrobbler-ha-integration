@@ -26,6 +26,8 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
+# How many Plex items to resolve per bulk metadata request.
+FETCH_BATCH_SIZE = 50
 
 
 def _to_utc_iso(value) -> str | None:
@@ -57,11 +59,24 @@ def _dedup_key(ids: dict, watched_at: str | None) -> str | None:
     return None
 
 
-def _plex_guids_to_ids(item) -> dict:
-    """Extract imdb/tmdb/tvdb ids from a Plex history item's guids."""
+def _fallback_key(entry: dict) -> str | None:
+    """Dedup key when no ids are available: title/show + slot + watch minute."""
+    watched_at = entry.get("watched_at")
+    if not watched_at:
+        return None
+    minute = watched_at[:16]
+    if entry["_type"] == MEDIA_TYPE_MOVIE:
+        title = (entry.get("movie", {}) or {}).get("title") or ""
+        return f"movie:{title.lower()}@{minute}"
+    show = (entry.get("show", {}) or {}).get("title") or ""
+    ep = entry.get("episode", {}) or {}
+    return f"ep:{show.lower()}:s{ep.get('season')}e{ep.get('number')}@{minute}"
+
+
+def _ids_from_guids(guids) -> dict:
+    """Turn a list of Plex guid objects into an imdb/tmdb/tvdb id dict."""
     ids: dict = {}
-    guids = getattr(item, "guids", None) or []
-    for guid in guids:
+    for guid in guids or []:
         gid = getattr(guid, "id", "") or ""
         if gid.startswith("imdb://"):
             ids["imdb"] = gid.replace("imdb://", "")
@@ -156,7 +171,9 @@ class HistorySync:
             "dry_run": dry_run,
         }
 
-        plex = self._entity._plex_server
+        # The Plex connection is set up in a background task, so right after
+        # setup it may not be ready yet. Wait briefly for it before giving up.
+        plex = await self._async_wait_for_plex()
         if plex is None:
             _LOGGER.error(
                 "Cannot import history: Plex server is not connected "
@@ -185,13 +202,28 @@ class HistorySync:
         # 2. Read existing Trakt history since start_date to deduplicate.
         existing_keys = await self._async_get_trakt_history_keys(start_date)
 
-        # 3. Build the batch of items missing from Trakt.
+        # 3. Keep only movies/episodes and drop obvious duplicates using data
+        #    already present on the lightweight history entries (no network), so
+        #    we don't fetch full items for everything (music, rewatches, ...).
+        candidates = [
+            item
+            for item in plex_items
+            if getattr(item, "type", None) in ("movie", "episode")
+        ]
+
+        # 4. Resolve full items (which carry the ids) in an executor: source()
+        #    is a blocking network call and must not run in the event loop.
+        entries = await self._hass.async_add_executor_job(
+            self._map_items, candidates
+        )
+
         to_push: list[dict] = []
-        for item in plex_items:
-            entry = self._plex_item_to_trakt(item)
+        for entry in entries:
             if entry is None:
                 continue
-            key = _dedup_key(entry["_ids"], entry["watched_at"])
+            key = _dedup_key(entry["_ids"], entry["watched_at"]) or _fallback_key(
+                entry
+            )
             if key and key in existing_keys:
                 summary["already_present"] += 1
                 continue
@@ -246,17 +278,93 @@ class HistorySync:
         _LOGGER.debug("Loaded %d existing Trakt history keys", len(keys))
         return keys
 
-    def _plex_item_to_trakt(self, item) -> dict | None:
-        """Map a Plex history item to a Trakt /sync/history entry."""
+    async def _async_wait_for_plex(self, timeout: float = 30.0):
+        """Wait for the entity's Plex connection to be ready, up to timeout."""
+        import asyncio
+
+        waited = 0.0
+        while self._entity._plex_server is None and waited < timeout:
+            await asyncio.sleep(1)
+            waited += 1
+        return self._entity._plex_server
+
+    def _map_items(self, items: list) -> list:
+        """Map Plex history items to Trakt entries (runs in an executor).
+
+        History entries are lightweight and carry no guids. Rather than loading
+        each item individually (one network round-trip per item), we resolve the
+        full items in bulk by ratingKey, a handful of requests for thousands of
+        items. This does blocking network I/O, so it must run in an executor,
+        never in the event loop.
+        """
+        plex = self._entity._plex_server
+
+        # Build a ratingKey -> full item map using bulk metadata requests.
+        full_by_key: dict = {}
+        rating_keys = [
+            str(getattr(it, "ratingKey", "") or "")
+            for it in items
+            if getattr(it, "ratingKey", None)
+        ]
+        import time
+
+        for start in range(0, len(rating_keys), FETCH_BATCH_SIZE):
+            chunk = [k for k in rating_keys[start : start + FETCH_BATCH_SIZE] if k]
+            if not chunk:
+                continue
+            path = f"/library/metadata/{','.join(chunk)}"
+            fetched = None
+            # Retry a few times: resolving Plex's *.plex.direct hostnames can be
+            # flaky, and a transient failure here would drop ids for the chunk.
+            for attempt in range(3):
+                try:
+                    fetched = plex.fetchItems(path)
+                    break
+                except Exception as err:  # noqa: BLE001
+                    if attempt == 2:
+                        _LOGGER.warning(
+                            "Bulk metadata fetch failed for %d items after "
+                            "retries (ids may be missing for these): %s",
+                            len(chunk),
+                            err,
+                        )
+                    else:
+                        time.sleep(1)
+            for full in fetched or []:
+                key = str(getattr(full, "ratingKey", "") or "")
+                if key:
+                    full_by_key[key] = full
+
+        entries = []
+        for item in items:
+            key = str(getattr(item, "ratingKey", "") or "")
+            full = full_by_key.get(key)
+            entries.append(self._history_entry(item, full))
+        return entries
+
+    def _history_entry(self, item, full) -> dict | None:
+        """Map a Plex history item (+ its pre-resolved full item) to Trakt.
+
+        Only movies and episodes are handled; music and other types are ignored.
+        `full` is the bulk-resolved library item that carries the guids; it may
+        be None if resolution failed, in which case we fall back to the
+        lightweight history item (title/season/number are on it anyway).
+        """
+        item_type = getattr(item, "type", None)
+        if item_type not in ("movie", "episode"):
+            return None
+
         watched_at = _to_utc_iso(getattr(item, "viewedAt", None))
         if not watched_at:
             return None
-        ids = _plex_guids_to_ids(item)
-        item_type = getattr(item, "type", None)
+
+        src = full or item
 
         if item_type == "movie":
-            movie: dict = {"title": getattr(item, "title", None)}
-            year = getattr(item, "year", None)
+            ids = _ids_from_guids(getattr(src, "guids", None))
+            title = getattr(src, "title", None) or getattr(item, "title", None)
+            movie: dict = {"title": title}
+            year = getattr(src, "year", None) or getattr(item, "year", None)
             if year:
                 movie["year"] = year
             if ids:
@@ -264,30 +372,40 @@ class HistorySync:
             return {
                 "_type": MEDIA_TYPE_MOVIE,
                 "_ids": ids,
-                "_label": getattr(item, "title", "?"),
+                "_label": title or "?",
                 "watched_at": watched_at,
                 "movie": movie,
             }
 
-        if item_type == "episode":
-            show_title = getattr(item, "grandparentTitle", None)
-            season = getattr(item, "parentIndex", None)
-            number = getattr(item, "index", None)
-            if season is None or number is None:
-                return None
-            show: dict = {"title": show_title}
-            if ids:
-                show["ids"] = ids
-            return {
-                "_type": MEDIA_TYPE_EPISODE,
-                "_ids": ids,
-                "_label": f"{show_title} S{season}E{number}",
-                "watched_at": watched_at,
-                "show": show,
-                "episode": {"season": season, "number": number},
-            }
-
-        return None
+        # episode: season/number come from the lightweight history item, which
+        # always has them; the guids come from the full item when available.
+        show_title = getattr(item, "grandparentTitle", None) or getattr(
+            src, "grandparentTitle", None
+        )
+        season = getattr(item, "parentIndex", None)
+        if season is None:
+            season = getattr(src, "parentIndex", None)
+        number = getattr(item, "index", None)
+        if number is None:
+            number = getattr(src, "index", None)
+        if season is None or number is None:
+            return None
+        # The episode's own guids are on the full item (already fetched in bulk).
+        # Trakt matches an episode by its own ids too, so we attach them to the
+        # episode object alongside the season/number and the show title.
+        episode_ids = _ids_from_guids(getattr(src, "guids", None))
+        show: dict = {"title": show_title}
+        episode: dict = {"season": season, "number": number}
+        if episode_ids:
+            episode["ids"] = episode_ids
+        return {
+            "_type": MEDIA_TYPE_EPISODE,
+            "_ids": episode_ids,
+            "_label": f"{show_title} S{season}E{number}",
+            "watched_at": watched_at,
+            "show": show,
+            "episode": episode,
+        }
 
     async def _async_push(self, to_push: list[dict], summary: dict) -> int:
         """Push entries to Trakt in batches; return the number pushed."""
