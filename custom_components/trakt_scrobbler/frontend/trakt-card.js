@@ -34,6 +34,9 @@ const STRINGS = {
     movie_plays: "Movie plays",
     mark_watched: "Mark watched",
     add_watchlist: "Add to watchlist",
+    label_view: "View",
+    label_entity: "Entity",
+    label_title: "Title (optional)",
   },
   fr: {
     upcoming: "À venir",
@@ -50,6 +53,9 @@ const STRINGS = {
     movie_plays: "Lectures films",
     mark_watched: "Marquer comme vu",
     add_watchlist: "Ajouter à la liste",
+    label_view: "Vue",
+    label_entity: "Entité",
+    label_title: "Titre (optionnel)",
   },
   de: {
     upcoming: "Demnächst",
@@ -66,6 +72,9 @@ const STRINGS = {
     movie_plays: "Film-Wiedergaben",
     mark_watched: "Als gesehen markieren",
     add_watchlist: "Zur Merkliste",
+    label_view: "Ansicht",
+    label_entity: "Entität",
+    label_title: "Titel (optional)",
   },
   es: {
     upcoming: "Próximamente",
@@ -82,6 +91,9 @@ const STRINGS = {
     movie_plays: "Reproducciones",
     mark_watched: "Marcar como visto",
     add_watchlist: "Añadir a la lista",
+    label_view: "Vista",
+    label_entity: "Entidad",
+    label_title: "Título (opcional)",
   },
 };
 
@@ -107,6 +119,10 @@ class TraktCard extends HTMLElement {
 
   getCardSize() {
     return this._view === "stats" ? 3 : 6;
+  }
+
+  static getConfigElement() {
+    return document.createElement("trakt-card-editor");
   }
 
   static getStubConfig(hass) {
@@ -429,6 +445,118 @@ class TraktCard extends HTMLElement {
 }
 
 customElements.define("trakt-card", TraktCard);
+
+const VIEWS = [
+  "upcoming",
+  "next_to_watch",
+  "watchlist",
+  "recommendations",
+  "stats",
+];
+
+class TraktCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  _t(key) {
+    const lang = (this._hass && this._hass.language) || "en";
+    const table = STRINGS[lang] || STRINGS.en;
+    return table[key] != null ? table[key] : STRINGS.en[key];
+  }
+
+  _emit() {
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  _render() {
+    if (!this._config || !this._hass) return;
+    const view = this._config.view || "upcoming";
+    const entity = this._config.entity || DEFAULT_ENTITY[view] || "";
+    const title = this._config.title || "";
+
+    if (!this._built) {
+      this.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+          <label style="display:flex;flex-direction:column;gap:4px;">
+            <span>${this._t("label_view")}</span>
+            <select id="tk-view" style="padding:8px;border-radius:6px;
+              background:var(--secondary-background-color);
+              color:var(--primary-text-color);
+              border:1px solid var(--divider-color);"></select>
+          </label>
+          <ha-entity-picker id="tk-entity"
+            .includeDomains='${JSON.stringify(["sensor"])}'
+            allow-custom-entity></ha-entity-picker>
+          <ha-textfield id="tk-title"></ha-textfield>
+        </div>`;
+      this._built = true;
+
+      const sel = this.querySelector("#tk-view");
+      VIEWS.forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = this._t(v);
+        sel.appendChild(opt);
+      });
+      sel.addEventListener("change", (e) => {
+        const v = e.target.value;
+        // Switch the entity to the sensible default for the new view unless the
+        // user picked a custom one that still makes sense.
+        this._config = {
+          ...this._config,
+          view: v,
+          entity: DEFAULT_ENTITY[v],
+        };
+        this._built = false;
+        this._render();
+        this._emit();
+      });
+
+      const ep = this.querySelector("#tk-entity");
+      ep.addEventListener("value-changed", (e) => {
+        this._config = { ...this._config, entity: e.detail.value };
+        this._emit();
+      });
+
+      const tf = this.querySelector("#tk-title");
+      tf.addEventListener("input", (e) => {
+        const val = e.target.value;
+        this._config = { ...this._config };
+        if (val) this._config.title = val;
+        else delete this._config.title;
+        this._emit();
+      });
+    }
+
+    const sel = this.querySelector("#tk-view");
+    if (sel) sel.value = view;
+    const ep = this.querySelector("#tk-entity");
+    if (ep) {
+      ep.hass = this._hass;
+      ep.value = entity;
+    }
+    const tf = this.querySelector("#tk-title");
+    if (tf) {
+      tf.label = this._t("label_title");
+      tf.value = title;
+    }
+  }
+}
+
+customElements.define("trakt-card-editor", TraktCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
