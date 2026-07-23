@@ -15,6 +15,7 @@ A Home Assistant integration that automatically scrobbles what you're watching f
 - 🔐 Two-click setup: a built-in Trakt app means you just authorize, no API app to create
 - 🧩 Plex sign-in via PIN, automatic server discovery, and per-library selection
 - 📥 Import your existing Plex watch history into Trakt (great when migrating from another tracker), with optional automatic sync
+- 📅 Trakt data sensors (upcoming, next-to-watch, watchlist, stats, recommendations) and action services, so one Trakt app covers everything
 
 ## Requirements
 
@@ -106,6 +107,113 @@ This is useful for:
 - Only scrobbling when you're home
 - Having a "Do Not Scrobble" switch
 - Creating complex automation conditions
+
+## Trakt sensors
+
+Because this integration already holds your one Trakt app, it can also expose
+Trakt data as sensors, so you don't need the separate `sensor.trakt`
+integration. Enable the groups you want in the integration options (upcoming and
+next-to-watch are on by default):
+
+| Sensor | What it exposes |
+|---|---|
+| `sensor.upcoming_shows` / `sensor.upcoming_movies` | Your upcoming calendar. Attributes include a `data` array in Upcoming Media Card format. |
+| `sensor.next_to_watch` | The next unwatched, already-aired episode for each in-progress show. |
+| `sensor.watchlist` | Items on your Trakt watchlist. |
+| `sensor.stats` | Movies/episodes watched, shows, total minutes/days. |
+| `sensor.recommended_shows` / `sensor.recommended_movies` | Personalized recommendations. |
+
+## Trakt Card
+
+The integration ships its own dashboard card, `custom:trakt-card`, and registers
+it automatically. You do not need to install anything or add a Lovelace resource:
+open your dashboard, click **Add card**, and pick **Trakt Card** from the list.
+
+The card has one option that matters, `view`, which selects what it shows. Each
+view reads the matching sensor:
+
+| `view` | Entity | Shows |
+|---|---|---|
+| `upcoming` | `sensor.upcoming_shows` or `sensor.upcoming_movies` | Your upcoming calendar with posters. |
+| `next_to_watch` | `sensor.next_to_watch` | The next episode to watch per in-progress show, with a "mark watched" button. |
+| `watchlist` | `sensor.watchlist` | Your Trakt watchlist. |
+| `stats` | `sensor.stats` | A summary of your watch stats. |
+| `recommendations` | `sensor.recommended_shows` or `sensor.recommended_movies` | Recommendations, with an "add to watchlist" button. |
+
+### Options
+
+| Option | Default | Description |
+|---|---|---|
+| `view` | `upcoming` | One of the views above. |
+| `entity` | matches the view | The sensor to read. Set this only if your entity ids differ from the defaults. |
+| `title` | the view name | Optional card title. |
+
+### Examples
+
+Upcoming episodes with posters:
+
+```yaml
+type: custom:trakt-card
+view: upcoming
+entity: sensor.upcoming_shows
+title: Upcoming Episodes
+```
+
+Next episode to watch (with a mark-watched button on each item):
+
+```yaml
+type: custom:trakt-card
+view: next_to_watch
+entity: sensor.next_to_watch
+```
+
+Recommendations (with an add-to-watchlist button on each item):
+
+```yaml
+type: custom:trakt-card
+view: recommendations
+entity: sensor.recommended_shows
+```
+
+Your watch stats:
+
+```yaml
+type: custom:trakt-card
+view: stats
+entity: sensor.stats
+```
+
+The card is localized (English, French, German, Spanish) and follows your Home
+Assistant language.
+
+## Trakt actions
+
+You can also act on Trakt from automations and scripts. Each service accepts an
+id (`trakt`, `imdb`, `tmdb` or `tvdb`) or a `title` to look the item up. The
+Trakt Card uses these services for its buttons.
+
+`trakt_scrobbler.add_to_watchlist` / `remove_from_watchlist` add or remove a
+movie or show:
+
+```yaml
+service: trakt_scrobbler.add_to_watchlist
+data:
+  media_type: show   # movie or show
+  imdb: tt0826760    # or tmdb / tvdb / trakt, or a title
+```
+
+`trakt_scrobbler.mark_watched` marks a movie or an episode as watched:
+
+```yaml
+service: trakt_scrobbler.mark_watched
+data:
+  media_type: episode   # movie or episode
+  tmdb: "32368"         # show id for episodes
+  season: 3
+  episode: 9
+```
+
+For a movie, pass `media_type: movie` with a movie id (or `title` and `year`).
 
 ## Supported Media Players
 

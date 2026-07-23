@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-22
+
+### Added
+- **Trakt data sensors** (one integration, one Trakt app, so you no longer need the separate `sensor.trakt`):
+  - `sensor.upcoming_shows` / `sensor.upcoming_movies`: your upcoming calendar, with attributes in both a native form and an **Upcoming Media Card**-compatible `data` array (drop-in replacement).
+  - `sensor.next_to_watch`: the next unwatched, already-aired episode for each in-progress show.
+  - `sensor.watchlist`: your Trakt watchlist.
+  - `sensor.stats`: movies/episodes watched, shows, total minutes/days.
+  - `sensor.recommended_shows` / `sensor.recommended_movies`: personalized recommendations.
+- **Action services** to write to Trakt from automations:
+  - `add_to_watchlist`, `remove_from_watchlist`, `mark_watched` (by ids or title).
+- **Per-group toggles** in the options so you only get the sensors you want (upcoming and next-to-watch on by default), plus an upcoming-window setting in days.
+- All entities are grouped under a single Trakt device.
+- **Built-in `custom:trakt-card`**, served and registered automatically (no resource to add). Views for upcoming, next-to-watch, watchlist, stats and recommendations, with posters, quick actions (mark watched, add to watchlist) and localization (English, French, German, Spanish). Includes a visual editor and shows up in the card picker.
+
+### Changed
+- A shared data update coordinator fetches Trakt data on a polling interval, separate from real-time scrobbling. Rate limits are respected (next-to-watch caps how many shows it checks per refresh).
+- The "Scrobble at % watched" option now controls when an item is marked watched, instead of the threshold being fixed at 80%.
+
+### Fixed
+- Episodes of shows with an ambiguous title (e.g. The Killing Danish original vs the US remake) could be scrobbled as the wrong show. The show is now identified by its own ids, resolved from Plex, instead of a title search.
+- The Plex connection was attempted only once at startup; if DNS for the `.plex.direct` host was not ready yet, it stayed unconfigured for the whole session. It now reconnects lazily when Plex is first needed.
+- Card actions could target the wrong media type (a recommended show added to the watchlist as a movie). Each item now carries an explicit media type.
+
 ## [1.2.0] - 2026-07-22
 
 ### Added

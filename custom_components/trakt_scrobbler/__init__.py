@@ -21,15 +21,21 @@ from .const import (
     DOMAIN,
     SERVICE_IMPORT_PLEX_HISTORY,
 )
+from .coordinator import TraktDataCoordinator
+from .frontend import async_register_card
 from .history_sync import HistorySync
+from .options import enabled_groups
+from .services_trakt import async_register_trakt_services
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
+PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER, Platform.SENSOR]
 
 # Where the media_player platform registers its live entities so the service
 # can reach their Plex + Trakt access.
 DATA_ENTITIES = "entities"
+# Key under which the data coordinator is stored per entry.
+DATA_COORDINATOR = "coordinator"
 
 IMPORT_HISTORY_SCHEMA = vol.Schema(
     {
@@ -39,23 +45,37 @@ IMPORT_HISTORY_SCHEMA = vol.Schema(
 )
 
 
+async def async_setup(hass: core.HomeAssistant, config: dict) -> bool:
+    """Set up integration-wide resources once (the Lovelace card)."""
+    await async_register_card(hass)
+    return True
+
+
 async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry
 ) -> bool:
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(DATA_ENTITIES, {})
+    hass.data[DOMAIN].setdefault(DATA_COORDINATOR, {})
     # Merge entry.data and entry.options
     config = {**entry.data, **entry.options}
     hass.data[DOMAIN][entry.entry_id] = config
 
-    # Forward the setup to the media_player platform
+    # Build the data coordinator for the enabled sensor groups and do a first
+    # refresh before forwarding platforms so sensors have data on creation.
+    coordinator = TraktDataCoordinator(hass, entry, enabled_groups(entry))
+    await coordinator.async_config_entry_first_refresh()
+    hass.data[DOMAIN][DATA_COORDINATOR][entry.entry_id] = coordinator
+
+    # Forward the setup to the platforms (media_player scrobbler + sensors)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Set up reload listener
     entry.async_on_unload(entry.add_update_listener(options_update_listener))
 
     _async_register_services(hass)
+    async_register_trakt_services(hass)
     _async_setup_auto_sync(hass, entry, config)
     _async_maybe_import_on_setup(hass, entry, config)
 
@@ -184,5 +204,6 @@ async def async_unload_entry(
     # Remove config entry from domain
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        hass.data[DOMAIN].get(DATA_COORDINATOR, {}).pop(entry.entry_id, None)
 
     return unload_ok

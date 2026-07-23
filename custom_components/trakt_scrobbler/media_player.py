@@ -11,6 +11,7 @@ from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.const import CONF_NAME, STATE_PLAYING, STATE_PAUSED
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -89,6 +90,7 @@ async def async_setup_entry(
         plex_server_url,
         plex_token,
         plex_libraries,
+        config_entry.entry_id,
     )
 
     # Register the entity so the history-import service can reach its
@@ -118,6 +120,7 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         plex_server_url,
         plex_token,
         plex_libraries=None,
+        entry_id=None,
     ) -> None:
         """Initialize the Trakt scrobbler."""
         self.hass = hass
@@ -125,6 +128,14 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         # Plex library section keys to import/scrobble from ([] means all).
         self._plex_libraries = [str(k) for k in (plex_libraries or [])]
         self._attr_unique_id = f"{DOMAIN}-{name}"
+        # Group under the same device as the Trakt sensors so the integration
+        # shows a single "Trakt Scrobbler" device with all its entities.
+        if entry_id:
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, entry_id)},
+                name="Trakt Scrobbler",
+                manufacturer="Trakt",
+            )
         self._state = None
         self._current_media = None
         self._media_type = None
@@ -411,8 +422,17 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
     async def get_plex_metadata(self, content_id: str) -> dict | None:
         """Get metadata from Plex server using content_id."""
         if not self._plex_server:
-            return None
-            
+            # The initial connection can fail if DNS for the .plex.direct host
+            # is not ready yet at startup (Errno -3 "Try again"). There is no
+            # background retry, so reconnect lazily the first time we actually
+            # need Plex instead of staying dead for the whole session.
+            if self._plex_server_url and self._plex_token:
+                _LOGGER.debug("Plex server not connected yet, retrying connection")
+                await self._async_init_plex()
+            if not self._plex_server:
+                return None
+
+
         try:
             # Extract rating key from content_id
             # Format: server://xxx/com.plexapp.plugins.library/library/metadata/84303
@@ -462,7 +482,38 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                             metadata['media_season'] = item.seasonNumber
                             metadata['media_episode'] = item.episodeNumber
                             metadata['media_content_type'] = 'episode'
-                            
+
+                            # The episode's own guids identify the EPISODE, not
+                            # the show. To resolve an ambiguous title (e.g. The
+                            # Killing DK original vs the US remake) we need the
+                            # SHOW's guids. Plex only fills grandparentGuids on
+                            # some servers, so fetch the show by its rating key
+                            # and read its guids directly.
+                            show_guid_ids = plex_trakt.ids_from_plex_guids(
+                                getattr(item, "grandparentGuids", None)
+                            )
+                            if not show_guid_ids:
+                                gp_key = getattr(
+                                    item, "grandparentRatingKey", None
+                                )
+                                if gp_key:
+                                    try:
+                                        show_item = await self.hass.async_add_executor_job(
+                                            self._plex_server.fetchItem,
+                                            int(gp_key),
+                                        )
+                                        show_guid_ids = plex_trakt.ids_from_plex_guids(
+                                            getattr(show_item, "guids", None)
+                                        )
+                                    except Exception as err:  # noqa: BLE001
+                                        _LOGGER.debug(
+                                            "Could not fetch show guids for %s: %s",
+                                            item.grandparentTitle,
+                                            err,
+                                        )
+                            for kind, value in show_guid_ids.items():
+                                metadata[f"show_{kind}_id"] = value
+
                         # Get external IDs if available (shared helper so the
                         # scrobbler and the history backfill parse guids alike).
                         guid_ids = plex_trakt.ids_from_plex_guids(
@@ -528,15 +579,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                 show_name = attrs.get("media_series_title")
                 season = attrs.get("media_season")
                 episode = attrs.get("media_episode")
-                
+
+                # Prefer the show's own ids (from the grandparent guids); the
+                # bare imdb/tmdb/tvdb ids belong to the episode and must not be
+                # used to identify the show.
+                show_ids = {}
+                for kind in ("imdb", "tmdb", "tvdb"):
+                    value = attrs.get(f"show_{kind}_id")
+                    if value:
+                        show_ids[kind] = value
+
                 media_obj["show"] = {
                     "title": show_name,
                 }
-                if ids:
-                    media_obj["show"]["ids"] = ids
+                if show_ids:
+                    media_obj["show"]["ids"] = show_ids
                 else:
-                    # Fallback: try with just title if no IDs available
-                    _LOGGER.debug("No external IDs found, using title only for: %s", show_name)
+                    # Fallback: try with just title if no show IDs available
+                    _LOGGER.debug("No external show IDs found, using title only for: %s", show_name)
                     
                 media_obj["episode"] = {
                     "season": season,
@@ -792,10 +852,24 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
         
         # Format data for sync/history API
         if "show" in media_obj and "episode" in media_obj:
-            # Always use fallback search for TV episodes to get correct Trakt IDs
-            _LOGGER.debug("TV Episode: Using fallback search for correct Trakt IDs")
             show_title = media_obj["show"]["title"]
-            trakt_show = await self._search_trakt_show(show_title)
+            # Prefer the external ids Plex already gave us (imdb/tmdb/tvdb).
+            # They pin the exact edition, so we never confuse two shows that
+            # share a title (e.g. The Killing DK original vs the US remake).
+            # Only fall back to a title search when we have no ids at all.
+            show_ids = media_obj["show"].get("ids") or {}
+            if show_ids:
+                trakt_show = {"ids": show_ids, "title": show_title}
+                _LOGGER.debug(
+                    "TV Episode: using Plex ids for %s: %s", show_title, show_ids
+                )
+            else:
+                _LOGGER.debug(
+                    "TV Episode: no ids from Plex, falling back to title search for %s",
+                    show_title,
+                )
+                trakt_show = await self._search_trakt_show(show_title)
+
             if trakt_show:
                 sync_data = {
                     "shows": [
@@ -816,8 +890,8 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                         }
                     ]
                 }
-                _LOGGER.debug("Using Trakt show data: %s (TMDB: %s)", 
-                           trakt_show["title"], 
+                _LOGGER.debug("Using Trakt show data: %s (TMDB: %s)",
+                           trakt_show["title"],
                            trakt_show.get("ids", {}).get("tmdb", "N/A"))
             else:
                 _LOGGER.warning("Could not find show on Trakt: %s", show_title)
@@ -931,6 +1005,15 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             # We only process the first valid player
             break
 
+    def _effective_threshold(self, duration) -> float:
+        """Percent watched required to mark an item as watched.
+
+        This is simply the user's "Scrobble at % watched" option, so the slider
+        actually controls when an item is marked watched. Falls back to 80% only
+        if the option is somehow unset.
+        """
+        return self._scrobble_percentage or 80
+
     async def _process_media(self, player, media_type, media_obj):
         """Process media information and handle scrobbling."""
         try:
@@ -940,13 +1023,12 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
             self._duration = duration
             
             # Enhanced debug logging for progress tracking
-            effective_threshold = 50 if duration < 300 else 80
+            effective_threshold = self._effective_threshold(duration)
             _LOGGER.debug("Media progress tracking:")
             _LOGGER.debug("  Position: %s seconds", position)
-            _LOGGER.debug("  Duration: %s seconds", duration) 
+            _LOGGER.debug("  Duration: %s seconds", duration)
             _LOGGER.debug("  Progress: %s%%", round(progress, 2))
-            _LOGGER.debug("  User threshold: %s%% (for watching updates)", self._scrobble_percentage)
-            _LOGGER.debug("  Final scrobble threshold: %s%% (to mark as watched)", effective_threshold)
+            _LOGGER.debug("  Scrobble threshold: %s%% (to mark as watched)", effective_threshold)
             _LOGGER.debug("  Will final scrobble: %s", progress >= effective_threshold)
             _LOGGER.debug("  Player state: %s", player.state)
             _LOGGER.debug("  Last scrobbled: %s", self._last_scrobbled == media_obj)
@@ -991,24 +1073,17 @@ class TraktScrobblerMediaPlayer(MediaPlayerEntity):
                         _LOGGER.warning("Failed to start watching, skipping further processing")
                         return
                 
-                # Check if we should scrobble (full episode completion)
-                # For episodes shorter than 5 minutes, use a lower threshold (50%)
-                # For normal episodes/movies, require at least 80% to mark as "watched"
-                effective_threshold = 50 if duration < 300 else 80
-                
+                # Mark as watched once the user's configured percentage is
+                # reached (this is the "Scrobble at % watched" option).
+                effective_threshold = self._effective_threshold(duration)
+
                 if progress >= effective_threshold and self._last_scrobbled != media_obj:
-                    _LOGGER.info("Scrobble threshold reached: %s%% >= %s%%", 
+                    _LOGGER.info("Scrobble threshold reached: %s%% >= %s%%",
                                round(progress, 2), effective_threshold)
                     await self.scrobble(media_obj, progress)
-                elif progress >= self._scrobble_percentage and self._last_scrobbled != media_obj:
-                    # User's threshold reached but not enough for "watched" - just update watching
-                    _LOGGER.debug("User threshold reached (%s%%) but not enough for final scrobble", 
-                               round(progress, 2))
-                    # Update progress on Trakt to show current position
-                    await self.update_progress(media_obj, progress)
                 else:
-                    _LOGGER.debug("Not scrobbling: progress=%s%%, threshold=%s%%, already_scrobbled=%s", 
-                                round(progress, 2), self._scrobble_percentage, self._last_scrobbled == media_obj)
+                    _LOGGER.debug("Not scrobbling: progress=%s%%, threshold=%s%%, already_scrobbled=%s",
+                                round(progress, 2), effective_threshold, self._last_scrobbled == media_obj)
                     
             elif player.state == STATE_PAUSED and self._is_watching:
                 _LOGGER.debug("Player is PAUSED - sending pause to Trakt")

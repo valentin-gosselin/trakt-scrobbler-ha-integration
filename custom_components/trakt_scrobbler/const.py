@@ -40,13 +40,49 @@ TRAKT_API_URL = "https://api.trakt.tv"
 TRAKT_API_VERSION = "2"
 TRAKT_APP_ID = "Home Assistant Trakt Scrobbler"
 
+# Sensor data groups (each maps to a set of Trakt read endpoints and can be
+# enabled/disabled independently in the options).
+GROUP_UPCOMING = "upcoming"
+GROUP_NEXT = "next_to_watch"
+GROUP_WATCHLIST = "watchlist"
+GROUP_STATS = "stats"
+GROUP_RECO = "recommendations"
+
+# Default polling interval for the data coordinator (hours).
+DEFAULT_SCAN_INTERVAL_HOURS = 3
+
+# Frontend card served and auto-registered by the integration.
+CARD_URL_BASE = "/trakt_scrobbler"
+CARD_FILENAME = "trakt-card.js"
+CARD_VERSION = "1.3.0-10"
+
+# Next-to-watch requires one progress request per show; cap how many of the
+# most recently watched shows we check per refresh to respect Trakt rate limits.
+NEXT_TO_WATCH_MAX_SHOWS = 40
+
+# Options that enable/disable each sensor group (added to the options flow in a
+# later story). Defaults: the two headline groups on, the rest off, so users
+# aren't flooded with entities they didn't ask for.
+CONF_ENABLE_UPCOMING = "enable_upcoming"
+CONF_ENABLE_NEXT = "enable_next_to_watch"
+CONF_ENABLE_WATCHLIST = "enable_watchlist"
+CONF_ENABLE_STATS = "enable_stats"
+CONF_ENABLE_RECO = "enable_recommendations"
+CONF_UPCOMING_DAYS = "upcoming_days"
+
+DEFAULT_ENABLE_UPCOMING = True
+DEFAULT_ENABLE_NEXT = True
+DEFAULT_ENABLE_WATCHLIST = False
+DEFAULT_ENABLE_STATS = False
+DEFAULT_ENABLE_RECO = False
+DEFAULT_UPCOMING_DAYS = 30
+
 # Where users can create/manage their own Trakt API app (advanced mode).
 TRAKT_APPS_URL = "https://app.trakt.tv/settings/apps/api/new"
 
 # Built-in Trakt app credentials so users don't have to create their own app.
 # For the OAuth device flow these are shipped with the client by design; Trakt
 # treats them as public identifiers for a distributed application, not secrets.
-# TODO: fill these in with the integration's own Trakt application before release.
 TRAKT_BUILTIN_CLIENT_ID = "abDhseoq2ze4ROIPOS7RsVH-w1odJVz6FoVZnV3pXic"
 TRAKT_BUILTIN_CLIENT_SECRET = "BALzkBPJGTnTbNDrBUScURR2kYQvyeIb_9V_Psjanw4"
 
@@ -62,6 +98,15 @@ SYNC_HISTORY = "/sync/history"
 SERVICE_IMPORT_PLEX_HISTORY = "import_plex_history"
 ATTR_START_DATE = "start_date"
 ATTR_DRY_RUN = "dry_run"
+
+# Services: act on Trakt (watchlist, mark watched)
+SERVICE_ADD_TO_WATCHLIST = "add_to_watchlist"
+SERVICE_REMOVE_FROM_WATCHLIST = "remove_from_watchlist"
+SERVICE_MARK_WATCHED = "mark_watched"
+ATTR_MEDIA_TYPE_FIELD = "media_type"
+ATTR_TITLE = "title"
+ATTR_SEASON_FIELD = "season"
+ATTR_EPISODE_FIELD = "episode"
 
 # Batch size for pushing items to /sync/history
 HISTORY_BATCH_SIZE = 100

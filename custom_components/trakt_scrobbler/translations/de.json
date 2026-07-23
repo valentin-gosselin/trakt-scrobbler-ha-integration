@@ -80,7 +80,13 @@
           "plex_server_url": "Plex-Server-URL (optional)",
           "plex_token": "Plex-Token (optional)",
           "auto_sync_history": "Plex-Verlauf automatisch mit Trakt synchronisieren",
-          "auto_sync_interval_hours": "Intervall der automatischen Synchronisierung (Stunden)"
+          "auto_sync_interval_hours": "Intervall der automatischen Synchronisierung (Stunden)",
+          "enable_upcoming": "Sensoren für kommende Serien/Filme aktivieren",
+          "upcoming_days": "Vorschau-Zeitraum (Tage)",
+          "enable_next_to_watch": "Sensor „Als Nächstes ansehen“ aktivieren",
+          "enable_watchlist": "Watchlist-Sensor aktivieren",
+          "enable_stats": "Statistik-Sensor aktivieren",
+          "enable_recommendations": "Empfehlungs-Sensoren aktivieren"
         }
       }
     }

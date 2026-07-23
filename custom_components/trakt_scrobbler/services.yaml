@@ -24,3 +24,161 @@ import_plex_history:
       default: true
       selector:
         boolean:
+
+add_to_watchlist:
+  name: Add to watchlist
+  description: Add a movie or show to your Trakt watchlist.
+  fields:
+    media_type:
+      name: Media type
+      description: Whether the item is a movie or a show.
+      required: true
+      example: movie
+      selector:
+        select:
+          options:
+            - movie
+            - show
+    title:
+      name: Title
+      description: Title to look up (used if no id is given).
+      required: false
+      example: The Bear
+      selector:
+        text:
+    year:
+      name: Year
+      required: false
+      example: 2022
+      selector:
+        number:
+          min: 1900
+          max: 2100
+          mode: box
+    trakt:
+      name: Trakt ID
+      required: false
+      selector:
+        text:
+    imdb:
+      name: IMDb ID
+      required: false
+      example: tt1234567
+      selector:
+        text:
+    tmdb:
+      name: TMDB ID
+      required: false
+      selector:
+        text:
+    tvdb:
+      name: TVDB ID
+      required: false
+      selector:
+        text:
+
+remove_from_watchlist:
+  name: Remove from watchlist
+  description: Remove a movie or show from your Trakt watchlist.
+  fields:
+    media_type:
+      name: Media type
+      required: true
+      example: movie
+      selector:
+        select:
+          options:
+            - movie
+            - show
+    title:
+      name: Title
+      required: false
+      selector:
+        text:
+    trakt:
+      name: Trakt ID
+      required: false
+      selector:
+        text:
+    imdb:
+      name: IMDb ID
+      required: false
+      selector:
+        text:
+    tmdb:
+      name: TMDB ID
+      required: false
+      selector:
+        text:
+    tvdb:
+      name: TVDB ID
+      required: false
+      selector:
+        text:
+
+mark_watched:
+  name: Mark watched
+  description: Mark a movie or an episode as watched on Trakt.
+  fields:
+    media_type:
+      name: Media type
+      description: movie, or episode.
+      required: true
+      example: episode
+      selector:
+        select:
+          options:
+            - movie
+            - episode
+    title:
+      name: Title
+      description: Movie title (for movies without an id).
+      required: false
+      selector:
+        text:
+    year:
+      name: Year
+      required: false
+      selector:
+        number:
+          min: 1900
+          max: 2100
+          mode: box
+    season:
+      name: Season
+      description: Season number (episodes, with show ids).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+    episode:
+      name: Episode
+      description: Episode number (episodes, with show ids).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1000
+          mode: box
+    trakt:
+      name: Trakt ID
+      required: false
+      selector:
+        text:
+    imdb:
+      name: IMDb ID
+      required: false
+      selector:
+        text:
+    tmdb:
+      name: TMDB ID
+      required: false
+      selector:
+        text:
+    tvdb:
+      name: TVDB ID
+      required: false
+      selector:
+        text:

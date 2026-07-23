@@ -1,7 +1,7 @@
 {
   "name": "Trakt Scrobbler",
   "render_readme": true,
-  "domains": ["media_player"],
+  "domains": ["media_player", "sensor"],
   "homeassistant": "2024.1.0",
   "country": ["US", "FR", "DE", "ES", "GB"]
 }
