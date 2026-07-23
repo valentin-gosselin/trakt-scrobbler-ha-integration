@@ -10,13 +10,29 @@
  *   max: 20                   (optional item cap for list views)
  */
 
-const DEFAULT_ENTITY = {
-  upcoming: "sensor.upcoming_shows",
-  next_to_watch: "sensor.next_to_watch",
-  watchlist: "sensor.watchlist",
-  recommendations: "sensor.recommended_shows",
-  stats: "sensor.stats",
+// The entity id ends with these suffixes; the integration prefixes them with
+// its device name (e.g. sensor.trakt_scrobbler_upcoming_shows), so we match by
+// suffix instead of hardcoding the full id.
+const VIEW_SUFFIX = {
+  upcoming: "upcoming_shows",
+  next_to_watch: "next_to_watch",
+  watchlist: "watchlist",
+  recommendations: "recommended_shows",
+  stats: "stats",
 };
+
+// Find the real sensor entity for a view by matching its suffix in hass.states.
+// Falls back to the plain sensor.<suffix> if nothing is found (or no hass).
+function entityForView(view, hass) {
+  const suffix = VIEW_SUFFIX[view] || VIEW_SUFFIX.upcoming;
+  if (hass && hass.states) {
+    const match = Object.keys(hass.states).find(
+      (id) => id.startsWith("sensor.") && id.endsWith(suffix)
+    );
+    if (match) return match;
+  }
+  return `sensor.${suffix}`;
+}
 
 const STRINGS = {
   en: {
@@ -109,11 +125,17 @@ class TraktCard extends HTMLElement {
     if (!config) throw new Error("Invalid configuration");
     this._config = config;
     this._view = config.view || "upcoming";
-    this._entity = config.entity || DEFAULT_ENTITY[this._view];
+    // Keep an explicit entity if the user set one; otherwise resolve it lazily
+    // once hass is available (entity ids carry the integration prefix).
+    this._explicitEntity = config.entity || null;
+    this._entity = this._explicitEntity;
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._explicitEntity) {
+      this._entity = entityForView(this._view, hass);
+    }
     this._render();
   }
 
@@ -126,18 +148,7 @@ class TraktCard extends HTMLElement {
   }
 
   static getStubConfig(hass) {
-    // Pick a real upcoming-shows sensor if one exists (entity ids can differ
-    // when the user already had a sensor of the same name), else a sane default.
-    let entity = "sensor.upcoming_shows";
-    if (hass && hass.states) {
-      const match = Object.keys(hass.states).find(
-        (id) =>
-          id.startsWith("sensor.") &&
-          id.includes("upcoming_shows")
-      );
-      if (match) entity = match;
-    }
-    return { view: "upcoming", entity };
+    return { view: "upcoming", entity: entityForView("upcoming", hass) };
   }
 
   _stateObj() {
@@ -484,7 +495,7 @@ class TraktCardEditor extends HTMLElement {
   _render() {
     if (!this._config || !this._hass) return;
     const view = this._config.view || "upcoming";
-    const entity = this._config.entity || DEFAULT_ENTITY[view] || "";
+    const entity = this._config.entity || entityForView(view, this._hass);
     const title = this._config.title || "";
 
     if (!this._built) {
@@ -508,18 +519,23 @@ class TraktCardEditor extends HTMLElement {
       VIEWS.forEach((v) => {
         const opt = document.createElement("option");
         opt.value = v;
-        opt.textContent = this._t(v);
+        // Flag views whose sensor is not enabled so the user knows why they are
+        // empty (those groups are off in the integration options by default).
+        const hasEntity =
+          this._hass &&
+          this._hass.states &&
+          Object.keys(this._hass.states).some(
+            (id) => id.startsWith("sensor.") && id.endsWith(VIEW_SUFFIX[v])
+          );
+        opt.textContent = hasEntity ? this._t(v) : `${this._t(v)} (?)`;
         sel.appendChild(opt);
       });
       sel.addEventListener("change", (e) => {
         const v = e.target.value;
-        // Switch the entity to the sensible default for the new view unless the
-        // user picked a custom one that still makes sense.
-        this._config = {
-          ...this._config,
-          view: v,
-          entity: DEFAULT_ENTITY[v],
-        };
+        // Point at the real sensor for the new view. Drop any previous explicit
+        // entity so the card resolves the right one for this view.
+        this._config = { ...this._config, view: v };
+        this._config.entity = entityForView(v, this._hass);
         this._built = false;
         this._render();
         this._emit();
