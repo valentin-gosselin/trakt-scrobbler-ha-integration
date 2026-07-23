@@ -18,9 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `add_to_watchlist`, `remove_from_watchlist`, `mark_watched` (by ids or title).
 - **Per-group toggles** in the options so you only get the sensors you want (upcoming and next-to-watch on by default), plus an upcoming-window setting in days.
 - All entities are grouped under a single Trakt device.
+- **Built-in `custom:trakt-card`**, served and registered automatically (no resource to add). Views for upcoming, next-to-watch, watchlist, stats and recommendations, with posters, quick actions (mark watched, add to watchlist) and localization (English, French, German, Spanish). Includes a visual editor and shows up in the card picker.
 
 ### Changed
 - A shared data update coordinator fetches Trakt data on a polling interval, separate from real-time scrobbling. Rate limits are respected (next-to-watch caps how many shows it checks per refresh).
+- The "Scrobble at % watched" option now controls when an item is marked watched, instead of the threshold being fixed at 80%.
+
+### Fixed
+- Episodes of shows with an ambiguous title (e.g. The Killing Danish original vs the US remake) could be scrobbled as the wrong show. The show is now identified by its own ids, resolved from Plex, instead of a title search.
+- The Plex connection was attempted only once at startup; if DNS for the `.plex.direct` host was not ready yet, it stayed unconfigured for the whole session. It now reconnects lazily when Plex is first needed.
+- Card actions could target the wrong media type (a recommended show added to the watchlist as a movie). Each item now carries an explicit media type.
 
 ## [1.2.0] - 2026-07-22
 

@@ -83,7 +83,6 @@ TRAKT_APPS_URL = "https://app.trakt.tv/settings/apps/api/new"
 # Built-in Trakt app credentials so users don't have to create their own app.
 # For the OAuth device flow these are shipped with the client by design; Trakt
 # treats them as public identifiers for a distributed application, not secrets.
-# TODO: fill these in with the integration's own Trakt application before release.
 TRAKT_BUILTIN_CLIENT_ID = "abDhseoq2ze4ROIPOS7RsVH-w1odJVz6FoVZnV3pXic"
 TRAKT_BUILTIN_CLIENT_SECRET = "BALzkBPJGTnTbNDrBUScURR2kYQvyeIb_9V_Psjanw4"
 
