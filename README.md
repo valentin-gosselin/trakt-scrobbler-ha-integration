@@ -129,6 +129,10 @@ The integration ships its own dashboard card, `custom:trakt-card`, and registers
 it automatically. You do not need to install anything or add a Lovelace resource:
 open your dashboard, click **Add card**, and pick **Trakt Card** from the list.
 
+It has a **visual editor**: pick a view from the dropdown and the matching sensor
+is filled in for you. Views whose sensor group is disabled are marked with `(?)`
+(enable those groups in the integration options to use them).
+
 The card has one option that matters, `view`, which selects what it shows. Each
 view reads the matching sensor:
 
